@@ -769,7 +769,6 @@ export const register: Register = (on, options) => {
       rowKey = key,
       isRightAligned = parentId !== '',
       width: number | null = null,
-      isBranch = false,
     ) => {
       const shortOf = (r: Ref) =>
         parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
@@ -777,37 +776,43 @@ export const register: Register = (on, options) => {
       // and titles form one straight column. A child's ID is a number such as
       // `.9` or `.11`, right-aligned so it lines up on its last digit, as in a
       // table; a full ID is left-aligned, since they all start alike.
-      // A given width is the whole column's; otherwise it fits this list, with
-      // room for a branch's ` ├ `.
-      const idWidth = width ?? Math.max(...refs.map(r => shortOf(r).length)) + (isBranch ? 3 : 0)
+      // A given width is the whole tree's column; otherwise it fits this list.
+      const idWidth = width ?? Math.max(...refs.map(r => shortOf(r).length))
+      // A priority slot only when some row has one, kept for every row so the
+      // titles line up.
+      const hasPriority = refs.some(r => r.priority !== undefined)
       const align = isRightAligned ? 'flex-end' : 'flex-start'
       return (
         <Box key={key} flexDirection="column" gap={spaced ? 'xs' : undefined}>
-          {refs.map((r, i) => (
+          {refs.map(r => (
             <Box key={`${rowKey}-${r.id}`} gap="xs" alignItems="flex-start">
               <Box width={idWidth} flexShrink={0} justifyContent={align}>
                 {/* Monospaced, so each character fills one of the cells the
                     column is measured in and the column fits its IDs. */}
                 <Text color="subtle" mono>
-                  {isBranch ? (i === refs.length - 1 ? ' └ ' : ' ├ ') : ''}
                   {shortOf(r)}
                 </Text>
               </Box>
               <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
                 {GLYPH[r.status] ?? '○'}
               </Text>
+              {/* An open bead's priority, read with its title; a closed one's
+                  no longer matters. */}
+              {hasPriority && (
+                <Box width={2} flexShrink={0}>
+                  {r.priority !== undefined && r.status !== 'closed' && (
+                    <Text size="footnote" color={priorityColor(r.priority)} mono>
+                      P{r.priority}
+                    </Text>
+                  )}
+                </Box>
+              )}
               <Box flexGrow={1} flexShrink={1}>
                 {md(`${rowKey}-${r.id}-title`, link(r.id, r.title || r.id))}
               </Box>
               {notes[r.id] && (
                 <Text size="footnote" color="subtle">
                   {notes[r.id]}
-                </Text>
-              )}
-              {/* An open bead's priority; a closed one's no longer matters. */}
-              {r.priority !== undefined && r.status !== 'closed' && (
-                <Text size="footnote" color={priorityColor(r.priority)}>
-                  P{r.priority}
                 </Text>
               )}
             </Box>
@@ -874,17 +879,13 @@ export const register: Register = (on, options) => {
           .map(g => ({ ...g, rows: g.parent ? g.rows : g.rows.filter(r => !parentIds.has(r.id)) }))
           .filter(g => g.parent || g.rows.length > 0)
       }
-      // One ID column for every row of both lists, so all the glyphs and titles
-      // line up: a child shows ` ├ .20` in the column, under its parent's ID.
-      const shortIn = (parent: Ref, r: Ref) =>
-        r.id.startsWith(`${parent.id}.`) ? r.id.slice(parent.id.length) : r.id
+      // One ID column for the top-level rows of both lists, so their glyphs
+      // and titles line up; children are indented under their parent.
       const widthOf = (rows: Ref[]) =>
         Math.max(
           0,
           ...groupsOf(rows).flatMap(g =>
-            g.parent
-              ? [g.parent.id.length, ...g.rows.map(r => 3 + shortIn(g.parent as Ref, r).length)]
-              : g.rows.map(r => r.id.length),
+            g.parent ? [g.parent.id.length] : g.rows.map(r => r.id.length),
           ),
         )
       const tree = (
@@ -920,17 +921,21 @@ export const register: Register = (on, options) => {
                     false,
                     topWidth,
                   )}
-                  {list(
-                    `${key}-group-${group.parent.id}`,
-                    group.rows,
-                    group.parent.id,
-                    rowNotes,
-                    true,
-                    key,
-                    false,
-                    topWidth,
-                    true,
-                  )}
+                  {/* The children, indented to start under the parent's glyph:
+                      an outline, which the indent alone makes plain. */}
+                  <Box gap="xs">
+                    <Box width={topWidth} flexShrink={0} />
+                    <Box flexGrow={1} flexShrink={1}>
+                      {list(
+                        `${key}-group-${group.parent.id}`,
+                        group.rows,
+                        group.parent.id,
+                        rowNotes,
+                        true,
+                        key,
+                      )}
+                    </Box>
+                  </Box>
                 </Box>
               ),
             )}
