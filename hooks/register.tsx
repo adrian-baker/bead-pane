@@ -1147,7 +1147,9 @@ export const register: Register = (on, options) => {
               look different at a glance; the status line names the type. */}
           <Box gap="sm" alignItems="flex-start">
             {Svg && typeIcon && (
-              <Box paddingTop={0.25} flexShrink={0}>
+              // A zero-width character in the title's size makes this box one
+              // title line tall, so the icon centres on the first line.
+              <Box alignItems="center" flexShrink={0}>
                 <Svg
                   key="type-icon"
                   alt={bead.type}
@@ -1156,6 +1158,9 @@ export const register: Register = (on, options) => {
                   source={typeIcon}
                   isInteractive
                 />
+                <Text size="heading" weight="semibold">
+                  {'\u200b'}
+                </Text>
               </Box>
             )}
             <Text size="heading" weight="semibold">
