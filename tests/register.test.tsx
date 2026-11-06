@@ -188,13 +188,21 @@ test('a long list of children is summarised until opened', async ($, on) => {
   expect(await chip('open')).toContain('3 open')
   expect(await chip('in_progress')).toContain('2 in progress')
   // The bar is 20 cells: 15 closed, 2 in progress, 3 open.
-  expect(await pane.find({ type: 'Text', text: /^━{15}$/ })).toBeTruthy()
-  expect(await pane.find({ type: 'Text', text: /^━{3}$/ })).toBeTruthy()
+  const bar = (await pane.findAll({ type: 'Svg' }))
+    .map(s => String((s.props as { source?: unknown }).source))
+    .find(src => src.includes('clipPath'))
+  expect(bar).toContain('width="120"')
+  expect(bar).toContain('width="24"')
   expect(textOf(await pane.find({ key: 'all' }))).toContain('Show all 20')
   // A status count narrows the list to that status, and pressing it again clears it.
   await pressChip('open')
   expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toHaveLength(3)
-  expect(await chip('open')).toContain('**3 open** ×')
+  // The others dim, so the row keeps its widths, and Clear joins its end.
+  const dimOf = async (st: string) =>
+    (await pane.find({ key: `count-${st}` }))?.props as { dimColor?: boolean } | undefined
+  expect((await dimOf('closed'))?.dimColor).toBe(true)
+  expect((await dimOf('open'))?.dimColor).toBe(false)
+  expect(textOf(await pane.find({ key: 'clear' }))).toContain('Clear')
   expect(await pane.find({ key: 'all' })).toBeFalsy()
   await pressChip('open')
   expect(textOf(await pane.find({ key: 'all' }))).toContain('Show all 20')

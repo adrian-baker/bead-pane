@@ -31,6 +31,7 @@ import {
   summarised,
   trailLabels,
   typeIcon,
+  progressBar,
   underParents,
   relinkFiles,
 } from './beads'
@@ -845,7 +846,7 @@ export const register: Register = (on, options) => {
               {/* A zero-width character makes the slot one line tall, so the
                   icon centres on the title's first line. */}
               {Svg && showsTypes && (
-                <Box width={2} flexShrink={0} alignItems="center">
+                <Box width={2} flexShrink={0} alignItems="center" justifyContent="center">
                   {typeOf(r)}
                   <Text>{'​'}</Text>
                 </Box>
@@ -1051,9 +1052,9 @@ export const register: Register = (on, options) => {
     const refHref = bead.externalRef === '' ? null : refUrl(bead.externalRef, repo)
 
     const isBlocked = bead.blockedBy.some(b => b.status !== 'closed')
-    // Centred on the title's line, the icon sat 2px above the text, whose
-    // middle is below its line's, so it is drawn 2px lower.
-    const titleIcon = typeIcon(bead.type, 18, 2)
+    // Centred on the title's line, the icon centres on the capitals; 1px
+    // lower, it sits between them and the lower case.
+    const titleIcon = typeIcon(bead.type, 16, 1)
 
     // Children whose IDs nest under this bead's come first, in ID order, so
     // they set the ID column; a child filed elsewhere comes after them.
@@ -1084,40 +1085,57 @@ export const register: Register = (on, options) => {
     const counts = countByStatus(kids)
     const children = kids.length > 0 && (
       <Box key="children" flexDirection="column" gap="xs">
-        {/* Each status's count, left-aligned: chips that filter on a long
-            list, `5/7` on a short one; then the progress bar as a thin line
-            under them. The `.n` IDs below say these are the children, so
-            the block needs no heading. */}
-        <Box flexDirection="column">
+        {/* Each status's count, left-aligned: links that filter on a long
+            list, `5/7` on a short one; then the progress bar, a few pixels
+            tall where the surface draws SVG. The `.n` IDs below say these
+            are the children, so the block needs no heading. */}
+        <Box flexDirection="column" gap="xs">
           {isLong && counts.length > 1 ? (
-            <Box gap="md" flexWrap="wrap">
+            <Box gap="md" flexWrap="wrap" alignItems="center">
               {counts.map(([st, n]) => {
-                const label = `${n} ${statusOf(st).label.toLowerCase()}`
                 // A link per status after its coloured glyph: a desktop's
                 // native button has no small size, and outweighed the
-                // title. The one on is bold with a ×, and pressing it again
-                // clears it.
-                const isOn = st === onlyStatus
+                // title. With one on, the others dim, so nothing changes
+                // width and the row stays put; pressing it again clears it,
+                // as does Clear at the row's end.
+                const isDim = onlyStatus !== null && st !== onlyStatus
                 return (
                   <Box key={`chip-${st}`} gap="xs" alignItems="center">
-                    <Text color={statusOf(st).color}>{GLYPH[st] ?? '○'}</Text>
-                    {md(`count-${st}`, link(`~only:${st}`, isOn ? `**${label}** ×` : label))}
+                    <Text color={statusOf(st).color} dimColor={isDim}>
+                      {GLYPH[st] ?? '○'}
+                    </Text>
+                    <Markdown
+                      key={`count-${st}`}
+                      text={link(`~only:${st}`, `${n} ${statusOf(st).label.toLowerCase()}`)}
+                      dimColor={isDim}
+                      pressableLinks={[`${BASE}~only:${st}`]}
+                      onLinkPress={pressed => {
+                        press(pressed.href).catch(err =>
+                          logFailure($, 'filtering the children', err),
+                        )
+                      }}
+                    />
                   </Box>
                 )
               })}
+              {onlyStatus !== null && md('clear', link(`~only:${onlyStatus}`, 'Clear'))}
             </Box>
           ) : (
             <Text size="caption" color="subtle">
               {kids.filter(k => k.status === 'closed').length}/{kids.length}
             </Text>
           )}
-          <Text size="caption">
-            {runs.map(([st, n]) => (
-              <Text key={`bar-${st}`} color={statusOf(st).color} dimColor={st === 'closed'}>
-                {'━'.repeat(n)}
-              </Text>
-            ))}
-          </Text>
+          {Svg ? (
+            <Svg key="bar" alt="" {...progressBar(runs)} />
+          ) : (
+            <Text size="caption">
+              {runs.map(([st, n]) => (
+                <Text key={`bar-${st}`} color={statusOf(st).color} dimColor={st === 'closed'}>
+                  {'━'.repeat(n)}
+                </Text>
+              ))}
+            </Text>
+          )}
         </Box>
         {list('kids', shown, id)}
         {isLong &&

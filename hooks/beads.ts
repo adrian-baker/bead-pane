@@ -522,6 +522,38 @@ export const countBubble = (count: number): { source: string; width: number; hei
   return { source, width, height }
 }
 
+// The progress bar as an SVG a few pixels tall: each run of `barRuns` a
+// segment `cell` pixels a cell, in its status's colour, the ends rounded.
+// Fixed colours, as for the bubble, matched to the theme's status colours;
+// closed is faint, so the work left stands out.
+const BAR_COLOURS: Record<string, string> = {
+  open: '#7ea6f0',
+  in_progress: '#d29b3a',
+  blocked: '#e07070',
+  closed: '#5e9b4f',
+}
+export const progressBar = (
+  runs: readonly [string, number][],
+  cell = 8,
+  height = 4,
+): { source: string; width: number; height: number } => {
+  const width = runs.reduce((sum, [, n]) => sum + n, 0) * cell
+  let x = 0
+  const segments = runs.map(([status, n]) => {
+    const opacity = status === 'closed' ? 0.55 : 1
+    const rect =
+      `<rect x="${x}" y="0" width="${n * cell}" height="${height}" ` +
+      `fill="${BAR_COLOURS[status] ?? '#8b8b8b'}" fill-opacity="${opacity}"/>`
+    x += n * cell
+    return rect
+  })
+  const source =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">` +
+    `<clipPath id="c"><rect width="${width}" height="${height}" rx="${height / 2}"/></clipPath>` +
+    `<g clip-path="url(#c)">${segments.join('')}</g></svg>`
+  return { source, width, height }
+}
+
 export const ago = (atMs: number | null, nowMs: number): string => {
   if (atMs === null) return '-'
   const mins = Math.max(0, Math.round((nowMs - atMs) / 60000))
