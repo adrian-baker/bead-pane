@@ -777,7 +777,9 @@ export const register: Register = (on, options) => {
       // and titles form one straight column. A child's ID is a number such as
       // `.9` or `.11`, right-aligned so it lines up on its last digit, as in a
       // table; a full ID is left-aligned, since they all start alike.
-      const idWidth = (width ?? Math.max(...refs.map(r => shortOf(r).length))) + (isBranch ? 2 : 0)
+      // A given width is the whole column's; otherwise it fits this list, with
+      // room for a branch's ` ├ `.
+      const idWidth = width ?? Math.max(...refs.map(r => shortOf(r).length)) + (isBranch ? 3 : 0)
       const align = isRightAligned ? 'flex-end' : 'flex-start'
       return (
         <Box key={key} flexDirection="column" gap={spaced ? 'xs' : undefined}>
@@ -787,7 +789,7 @@ export const register: Register = (on, options) => {
                 {/* Monospaced, so each character fills one of the cells the
                     column is measured in and the column fits its IDs. */}
                 <Text color="subtle" mono>
-                  {isBranch ? (i === refs.length - 1 ? '└ ' : '├ ') : ''}
+                  {isBranch ? (i === refs.length - 1 ? ' └ ' : ' ├ ') : ''}
                   {shortOf(r)}
                 </Text>
               </Box>
@@ -830,7 +832,16 @@ export const register: Register = (on, options) => {
           const entry = all[ref]
           if (entry?.kind === 'missing') return []
           const bead = entry?.kind === 'found' ? entry.bead : null
-          return [{ id: ref, title: bead?.title ?? '', status: bead?.status ?? '' }]
+          return [
+            {
+              id: ref,
+              title: bead?.title ?? '',
+              status: bead?.status ?? '',
+              ...(bead?.priority !== null && bead?.priority !== undefined
+                ? { priority: bead.priority }
+                : {}),
+            },
+          ]
         })
       // The beads the session worked on, each with what it last did, then the
       // ones a reply only linked.
@@ -854,15 +865,35 @@ export const register: Register = (on, options) => {
       // it by their `.n`, and the beads with no parent rows beside it. Every
       // top-level row shares one ID column, so their glyphs line up and a bead
       // after a group reads as the parent's sibling, not its child.
-      const tree = (key: string, rows: Ref[], rowNotes: Record<string, string>) => {
+      // The groups a tree draws: a parent that's also in the list shows once,
+      // as its group's row.
+      const groupsOf = (rows: Ref[]) => {
         const groups = underParents(rows, parentOf)
         const parentIds = new Set(groups.flatMap(g => (g.parent ? [g.parent.id] : [])))
-        // A parent that's also in the list shows once, as its group's row.
-        const shown = groups
+        return groups
           .map(g => ({ ...g, rows: g.parent ? g.rows : g.rows.filter(r => !parentIds.has(r.id)) }))
           .filter(g => g.parent || g.rows.length > 0)
-        const topIds = shown.flatMap(g => (g.parent ? [g.parent.id] : g.rows.map(r => r.id)))
-        const topWidth = Math.max(...topIds.map(ref => ref.length))
+      }
+      // One ID column for every row of both lists, so all the glyphs and titles
+      // line up: a child shows ` ├ .20` in the column, under its parent's ID.
+      const shortIn = (parent: Ref, r: Ref) =>
+        r.id.startsWith(`${parent.id}.`) ? r.id.slice(parent.id.length) : r.id
+      const widthOf = (rows: Ref[]) =>
+        Math.max(
+          0,
+          ...groupsOf(rows).flatMap(g =>
+            g.parent
+              ? [g.parent.id.length, ...g.rows.map(r => 3 + shortIn(g.parent as Ref, r).length)]
+              : g.rows.map(r => r.id.length),
+          ),
+        )
+      const tree = (
+        key: string,
+        rows: Ref[],
+        rowNotes: Record<string, string>,
+        topWidth: number,
+      ) => {
+        const shown = groupsOf(rows)
         return (
           <Box key={key} flexDirection="column" gap="md">
             {shown.map(group =>
@@ -889,31 +920,30 @@ export const register: Register = (on, options) => {
                     false,
                     topWidth,
                   )}
-                  <Box paddingLeft="sm">
-                    {list(
-                      `${key}-group-${group.parent.id}`,
-                      group.rows,
-                      group.parent.id,
-                      rowNotes,
-                      true,
-                      key,
-                      false,
-                      null,
-                      true,
-                    )}
-                  </Box>
+                  {list(
+                    `${key}-group-${group.parent.id}`,
+                    group.rows,
+                    group.parent.id,
+                    rowNotes,
+                    true,
+                    key,
+                    false,
+                    topWidth,
+                    true,
+                  )}
                 </Box>
               ),
             )}
           </Box>
         )
       }
+      const width = Math.max(widthOf(worked), widthOf(looked))
       return (
         <Box flexDirection="column" gap="lg">
           {worked.length > 0 &&
-            section('worked-section', 'Worked on', tree('worked', worked, notes))}
+            section('worked-section', 'Worked on', tree('worked', worked, notes, width))}
           {looked.length > 0 &&
-            section('mentioned-section', 'Mentioned', tree('mentioned', looked, {}))}
+            section('mentioned-section', 'Mentioned', tree('mentioned', looked, {}, width))}
         </Box>
       )
     }
@@ -996,18 +1026,14 @@ export const register: Register = (on, options) => {
       bd,
       shown.flatMap(k => (k.id in all ? [] : [k.id])),
     )
-    // Every status's count, closed included, as a chip that filters to it; the
-    // heading says only the total, so no number shows twice.
+    // Every status's count, closed included, as a chip that filters to it.
     const counts = countByStatus(kids)
     const children = kids.length > 0 && (
       <Box key="children" flexDirection="column" gap="xs">
-        <Box gap="sm" alignItems="center">
-          <Text size="caption" weight="semibold" color="subtle">
-            CHILDREN
-          </Text>
-          <Text size="caption" color="subtle">
-            {kids.length}
-          </Text>
+        {/* The progress bar, then each status's count: chips that filter on a
+            long list, `5/7` on a short one. The `.n` IDs below say these are
+            the children, so the row needs no heading. */}
+        <Box gap="sm" alignItems="center" flexWrap="wrap">
           <Text size="caption">
             {runs.map(([st, n]) => (
               <Text key={`bar-${st}`} color={statusOf(st).color} dimColor={st === 'closed'}>
@@ -1015,46 +1041,50 @@ export const register: Register = (on, options) => {
               </Text>
             ))}
           </Text>
+          {isLong && counts.length > 1 ? (
+            <Box gap="sm" flexWrap="wrap">
+              {counts.map(([st, n]) => {
+                const label = `${n} ${statusOf(st).label.toLowerCase()}`
+                const isOn = st === onlyStatus
+                // A chip per status: outlined faintly when off and in the
+                // status's colour when on, so turning one on moves nothing.
+                // The terminal would spend three rows on an outline, so it
+                // brackets the one on.
+                const isTerminal = e.surface === 'terminal'
+                return (
+                  <Box
+                    key={`count-${st}`}
+                    gap="xs"
+                    alignItems="center"
+                    {...(isTerminal
+                      ? {}
+                      : {
+                          borderStyle: 'round',
+                          borderColor: isOn ? statusOf(st).color : 'subtle',
+                          borderDimColor: !isOn,
+                          paddingX: 'xs' as const,
+                        })}
+                  >
+                    <Text size="footnote" color={statusOf(st).color}>
+                      {GLYPH[st] ?? '○'}
+                    </Text>
+                    {md(
+                      `count-${st}-link`,
+                      link(
+                        `~only:${st}`,
+                        isOn ? (isTerminal ? `[${label}]` : `**${label}**`) : label,
+                      ),
+                    )}
+                  </Box>
+                )
+              })}
+            </Box>
+          ) : (
+            <Text size="caption" color="subtle">
+              {kids.filter(k => k.status === 'closed').length}/{kids.length}
+            </Text>
+          )}
         </Box>
-        {/* All one status, a filter would add nothing. */}
-        {isLong && counts.length > 1 && (
-          <Box gap="md" flexWrap="wrap">
-            {counts.map(([st, n]) => {
-              const label = `${n} ${statusOf(st).label.toLowerCase()}`
-              const isOn = st === onlyStatus
-              // A chip per status: outlined faintly when off and in the status's
-              // colour when on, so turning one on moves nothing. The terminal
-              // would spend three rows on an outline, so it brackets the one on.
-              const isTerminal = e.surface === 'terminal'
-              return (
-                <Box
-                  key={`count-${st}`}
-                  gap="xs"
-                  alignItems="center"
-                  {...(isTerminal
-                    ? {}
-                    : {
-                        borderStyle: 'round',
-                        borderColor: isOn ? statusOf(st).color : 'subtle',
-                        borderDimColor: !isOn,
-                        paddingX: 'xs' as const,
-                      })}
-                >
-                  <Text size="footnote" color={statusOf(st).color}>
-                    {GLYPH[st] ?? '○'}
-                  </Text>
-                  {md(
-                    `count-${st}-link`,
-                    link(
-                      `~only:${st}`,
-                      isOn ? (isTerminal ? `[${label}]` : `**${label}**`) : label,
-                    ),
-                  )}
-                </Box>
-              )
-            })}
-          </Box>
-        )}
         {list('kids', shown, id)}
         {isLong &&
           onlyStatus === null &&

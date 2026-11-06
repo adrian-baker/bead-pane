@@ -172,8 +172,8 @@ test('a long list of children is summarised until opened', async ($, on) => {
   expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toEqual(
     [16, 17, 18, 19, 20].map(n => `kids-demo-epic1.${n}`),
   )
-  // The heading gives the total, and closed gets a chip like the rest.
-  expect(await pane.find({ type: 'Text', text: /^20$/ })).toBeTruthy()
+  // No heading: the bar and the chips, closed included, head the list.
+  expect(await pane.find({ type: 'Text', text: /CHILDREN/ })).toBeFalsy()
   expect(textOf(await pane.find({ key: 'count-closed-link' }))).toContain('15 closed')
   expect(textOf(await pane.find({ key: 'count-open-link' }))).toContain('3 open')
   expect(textOf(await pane.find({ key: 'count-in_progress-link' }))).toContain('2 in progress')
