@@ -1307,9 +1307,10 @@ export const register: Register = (on, options) => {
               tracked elsewhere, as a link where it can be one. */}
             <Box gap="xs" alignItems="center" flexWrap="wrap">
               <Text size="footnote">
-                <Text color={status.color} dimColor={bead.status === 'closed'}>
-                  {GLYPH[bead.status] ?? '○'}{' '}
-                </Text>
+                {/* The status's glyph at body size, so it leads the row. */}
+                <Text size="body" color={status.color} dimColor={bead.status === 'closed'}>
+                  {GLYPH[bead.status] ?? '○'}
+                </Text>{' '}
                 {status.label}
                 {/* A deferred bead says when it comes back. */}
                 {bead.status === 'deferred' &&
