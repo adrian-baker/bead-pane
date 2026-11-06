@@ -1314,7 +1314,8 @@ export const register: Register = (on, options) => {
               <Text size="heading" color={status.color} dimColor={bead.status === 'closed'}>
                 {GLYPH[bead.status] ?? '○'}
               </Text>
-              <Text size="footnote">
+              {/* The row's text is all one size, the body's. */}
+              <Text>
                 {status.label}
                 {/* A deferred bead says when it comes back. */}
                 {bead.status === 'deferred' &&
@@ -1337,10 +1338,10 @@ export const register: Register = (on, options) => {
               </Text>
               {refHref !== null && <Text color="subtle">·</Text>}
               {refHref !== null && md('ref', `[${refLabel(bead.externalRef)}](${refHref})`)}
-              {/* Then, smaller, when it last changed, any ref that can't be a
+              {/* Then, in grey, when it last changed, any ref that can't be a
                 link, and its labels: one row, wrapping on a narrow pane. */}
               <Text color="subtle">·</Text>
-              <Text size="caption" color="subtle">
+              <Text color="subtle">
                 {[
                   bead.status === 'closed' && bead.closedMs !== null
                     ? `Closed ${ago(bead.closedMs, nowMs)}`
