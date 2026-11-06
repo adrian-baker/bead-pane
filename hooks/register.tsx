@@ -823,7 +823,7 @@ export const register: Register = (on, options) => {
         <Box gap="xs" alignItems="center">
           {icon && Svg && (
             // Every Svg has an `alt`: a desktop draws none of one without.
-            <Svg key={`${key}-icon`} alt={heading} {...iconSvg(icon, 16)} />
+            <Svg key={`${key}-icon`} alt={heading} {...iconSvg(icon, 20)} />
           )}
           <Text size="caption" weight="semibold" color={color}>
             {heading.toUpperCase()}
