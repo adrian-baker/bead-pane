@@ -1,7 +1,7 @@
 // What bd prints, parsed into the mod's own types, and the other pure parts:
 // nothing here runs a command or touches state.
 
-import type { Bead, How, Lookup, Ref } from '../types'
+import type { Bead, Comment, How, Lookup, Ref } from '../types'
 
 const patterns = new Map<string, RegExp>()
 
@@ -122,6 +122,12 @@ const beadOf = (row: Row): Bead => {
     assignee: str(row.assignee),
     createdMs: ms(row.created_at),
     updatedMs: ms(row.updated_at),
+    closedMs: ms(row.closed_at),
+    labels: Array.isArray(row.labels) ? row.labels.filter(l => typeof l === 'string') : [],
+    externalRef: str(row.external_ref),
+    specId: str(row.spec_id),
+    commentCount: typeof row.comment_count === 'number' ? row.comment_count : 0,
+    comments: null,
     extras,
     blockedBy: ofType('blocks'),
     parent: ofType('parent-child')[0] ?? refs(deps.filter(d => d.id === row.parent))[0] ?? null,
@@ -165,6 +171,12 @@ export const parseShown = (
     }),
   }
 }
+
+// `bd comments <id> --json`, oldest first.
+export const parseComments = (stdout: string): Comment[] =>
+  rows(json(stdout))
+    .map(r => ({ author: str(r.author), text: str(r.text), createdMs: ms(r.created_at) }))
+    .sort((a, b) => (a.createdMs ?? 0) - (b.createdMs ?? 0))
 
 // `bd children <id> --json`, in ID order.
 export const parseChildren = (stdout: string): Ref[] => refs(json(stdout)).sort(byId)

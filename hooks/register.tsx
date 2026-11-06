@@ -13,6 +13,7 @@ import {
   JOURNAL,
   parseAssigned,
   parseChildren,
+  parseComments,
   parseDatabasePath,
   parsePrefix,
   parseShown,
@@ -36,7 +37,7 @@ const beads = atom(
   { plugin: 'bead-pane', key: 'beads' } as const,
   {},
   {
-    shape: 'beads-7',
+    shape: 'beads-8',
   },
 )
 // The bead the pane shows; null for the session's list.
@@ -132,6 +133,9 @@ function ensureSetup($: EngineInterface, bd: string): void {
   })
 }
 
+// Beads whose comments the pane has asked for this load.
+const commentsAsked = new Set<string>()
+
 // Bead IDs asked about this load. Answers stay in `beads` across a reload,
 // so a draw asks only about an ID it has no answer for. A bd command that
 // changes a bead, or opening the bead in the pane, asks again.
@@ -185,6 +189,22 @@ async function lookUp($: EngineInterface, bd: string): Promise<void> {
               kids.kind === 'failed'
                 ? kids.detail
                 : kids.result.stderr.trim() || 'bd children failed',
+          }
+  }
+  // The comments of the bead the pane shows, so a list of beads needs no more calls.
+  const shownId = await read($, selected)
+  const onPane = shownId === null ? undefined : lookups[shownId]
+  if (shownId !== null && onPane?.kind === 'found' && onPane.bead.commentCount > 0) {
+    const said = await runBd($, bd, ['comments', shownId, '--json'])
+    lookups[shownId] =
+      said.kind === 'ran' && said.result.exitCode === 0
+        ? { kind: 'found', bead: { ...onPane.bead, comments: parseComments(said.result.stdout) } }
+        : {
+            kind: 'failed',
+            detail:
+              said.kind === 'failed'
+                ? said.detail
+                : said.result.stderr.trim() || 'bd comments failed',
           }
   }
   await update($, beads, all => ({ ...all, ...lookups }))
@@ -507,8 +527,9 @@ export const register: Register = (on, options) => {
       const target = href.slice(BASE.length)
       if (target === '~all') return update($, expanded, v => (v === id ? null : id))
       if (target === '~home') return update($, selected, () => null)
+      // Selected first, so the lookup fetches its comments.
+      await update($, selected, () => target)
       refresh($, bd, [target])
-      return update($, selected, () => target)
     }
     const md = (key: string, text: string) => {
       const links = [...text.matchAll(/\]\(([^)\s]+)\)/g)].flatMap(m =>
@@ -627,6 +648,12 @@ export const register: Register = (on, options) => {
       )
     }
     const bead = entry.bead
+    // A bead opened from a reply was looked up before it was shown, without
+    // its comments: ask again, once.
+    if (bead.commentCount > 0 && bead.comments === null && !commentsAsked.has(id)) {
+      commentsAsked.add(id)
+      refresh($, bd, [id])
+    }
 
     // The chain of beads above this one, outermost first, as far as it is known.
     const above: Ref[] = []
@@ -725,8 +752,18 @@ export const register: Register = (on, options) => {
             <Text color="subtle">{'  ·  '}</Text>
             {bead.assignee ? bead.assignee : <Text color="subtle">Unassigned</Text>}
           </Text>
+          {/* When it last changed, then where else it's tracked and its labels. */}
           <Text size="caption" color="subtle">
-            Updated {ago(bead.updatedMs, nowMs)} · created {ago(bead.createdMs, nowMs)}
+            {[
+              bead.status === 'closed' && bead.closedMs !== null
+                ? `Closed ${ago(bead.closedMs, nowMs)}`
+                : `Updated ${ago(bead.updatedMs, nowMs)}`,
+              `created ${ago(bead.createdMs, nowMs)}`,
+              bead.externalRef,
+              ...bead.labels,
+            ]
+              .filter(part => part !== '')
+              .join(' · ')}
           </Text>
         </Box>
         {openBlockers.length > 0 &&
@@ -750,6 +787,26 @@ export const register: Register = (on, options) => {
         {bead.extras.map(x =>
           section(`extra-${x.label}`, x.label, md(`text-${x.label}`, linkify(x.text))),
         )}
+        {bead.specId !== '' && section('spec', 'Spec', <Text>{bead.specId}</Text>)}
+        {bead.commentCount > 0 &&
+          section(
+            'comments',
+            `Comments ${bead.commentCount}`,
+            bead.comments === null ? (
+              <Text color="subtle">Loading…</Text>
+            ) : (
+              <Box flexDirection="column" gap="sm">
+                {bead.comments.map((c, i) => (
+                  <Box key={`comment-${i}`} flexDirection="column">
+                    <Text size="caption" color="subtle">
+                      {c.author || 'Someone'} · {ago(c.createdMs, nowMs)}
+                    </Text>
+                    {md(`comment-${i}-text`, linkify(c.text))}
+                  </Box>
+                ))}
+              </Box>
+            ),
+          )}
         {!isEpic && children}
       </Box>
     )

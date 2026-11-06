@@ -6,6 +6,7 @@ import {
   idsIn,
   isWork,
   linkIds,
+  parseComments,
   parseShown,
   summarised,
   trailLabels,
@@ -98,4 +99,16 @@ test('viewing or linking a bead is not working on it', () => {
   expect(isWork('in title')).toBe(true)
   expect(isWork('viewed')).toBe(false)
   expect(isWork('mentioned')).toBe(false)
+})
+
+test('comments come oldest first, and a missing date sorts first', () => {
+  const said = parseComments(
+    JSON.stringify([
+      { author: 'B', text: 'second', created_at: '2026-11-02T00:00:00Z' },
+      { author: 'A', text: 'first', created_at: '2026-11-01T00:00:00Z' },
+      { text: 'undated' },
+    ]),
+  )
+  expect(said.map(c => c.text)).toEqual(['undated', 'first', 'second'])
+  expect(said[0]?.author).toBe('')
 })

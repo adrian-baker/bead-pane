@@ -460,3 +460,67 @@ test('/beads runs mid-turn and opens the pane without a transcript line', async 
   expect(await $.command.run(typed)).toEqual({})
   expect(opened).toBe('bead')
 })
+
+test("the pane shows a bead's labels, external ref, spec and comments", async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const ran: (readonly string[])[] = []
+  on(
+    'process.run',
+    fakeBd({
+      ran,
+      beads: {
+        'demo-a1b2c': row('demo-a1b2c', {
+          status: 'closed',
+          closed_at: '2026-11-05T22:00:00Z',
+          labels: ['papercut', 'ci'],
+          external_ref: 'gh-2510',
+          spec_id: 'specs/importer.md',
+          comment_count: 2,
+          comments_omitted: true,
+        }),
+      },
+      comments: {
+        'demo-a1b2c': [
+          {
+            id: 2,
+            author: 'Sam',
+            text: 'Fixed by demo-d3e4f.',
+            created_at: '2026-11-05T23:00:00Z',
+          },
+          { id: 1, author: 'Ana', text: 'Seen again today.', created_at: '2026-11-05T12:00:00Z' },
+        ],
+      },
+    }),
+  )
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+
+  const ui = await $.ui.mount(message('See demo-a1b2c.'))
+  await settle(clock)
+  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  const pane = await $.ui.mount(PANE)
+  await settle(clock)
+  expect(
+    await pane.find({
+      type: 'Text',
+      text: 'Closed 2h ago · created 6d ago · gh-2510 · papercut · ci',
+    }),
+  ).toBeTruthy()
+  expect(await pane.find({ type: 'Text', text: 'specs/importer.md' })).toBeTruthy()
+  expect(await pane.find({ type: 'Text', text: 'COMMENTS 2' })).toBeTruthy()
+  // Oldest first, IDs linked.
+  expect(textOf(await pane.find({ key: 'comment-0-text' }))).toBe('Seen again today.')
+  expect(textOf(await pane.find({ key: 'comment-1-text' }))).toBe(
+    'Fixed by [demo‑d3e4f](https://beads.invalid/demo-d3e4f).',
+  )
+  expect(await pane.find({ type: 'Text', text: /^Sam · 1h ago$/ })).toBeTruthy()
+  // Comments come only for the bead shown, in one call.
+  expect(ran.filter(argv => argv[1] === 'comments')).toEqual([
+    ['bd', 'comments', 'demo-a1b2c', '--json'],
+  ])
+  await pane.unmount()
+  await ui.unmount()
+})

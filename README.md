@@ -7,7 +7,8 @@ pane. The pane shows:
 - the title, status, priority, type, assignee and dates
 - the beads above it, as a breadcrumb
 - its open blockers
-- the description, notes, design, acceptance criteria and close reason
+- the description, notes, design, acceptance criteria, spec and close reason
+- its comments, its labels and where else it's tracked, such as `gh-2510`
 - its children, with a bar coloured by status; past 12, the ones still open, and a link to all
 
 Bead IDs in the pane are links too, so you can move through the tree from there. An ID inside

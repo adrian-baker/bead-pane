@@ -1,5 +1,7 @@
 export type Ref = { id: string; title: string; status: string }
 
+export type Comment = { author: string; text: string; createdMs: number | null }
+
 export type Bead = {
   status: string
   title: string
@@ -10,6 +12,15 @@ export type Bead = {
   // null when bd gave no date it could parse.
   createdMs: number | null
   updatedMs: number | null
+  closedMs: number | null
+  labels: string[]
+  // Where the bead is tracked elsewhere, such as `gh-2510`; empty when nowhere.
+  externalRef: string
+  // The specification it builds, as `bd create --spec-id` gave it; empty when none.
+  specId: string
+  commentCount: number
+  // Fetched only for the bead the pane shows: null until then.
+  comments: Comment[] | null
   // Notes, design and acceptance criteria, each only when the bead has one.
   extras: { label: string; text: string }[]
   blockedBy: Ref[]
