@@ -10,7 +10,7 @@ const MSG = {
   },
 } as const
 
-test('a bead line opens its details in a pane', async ($, on) => {
+test('a bead ID becomes a link that opens the bead in the pane', async ($, on) => {
   on('process.run', (_, e) => {
     const [, verb, ref] = e.argv
     const bead = {

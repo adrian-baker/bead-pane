@@ -1,18 +1,24 @@
 # bead-pane
 
-A Claude Code mod for [beads](https://github.com/steveyegge/beads). Claude's replies turn each
-bead ID they mention, such as `fp-g5h6.4`, into a link. Clicking one opens the bead in a side pane:
-its title, status, priority, type, assignee and dates, the beads above it as a breadcrumb, its
-blockers, description, notes, design, acceptance criteria and close reason, and its children with
-their status. Bead IDs inside the pane are links too, so you can walk the tree from there.
+A Claude Code mod for [beads](https://github.com/steveyegge/beads). It turns each bead ID in
+Claude's replies, such as `fp-g5h6.4`, into a link. Clicking the link opens the bead in a side
+pane. The pane shows:
 
-The mod reads beads with `bd show <id> --json` and `bd children <id> --json` and changes nothing.
-It looks a bead up once, after the message has drawn, and caches the answer for the session, so
-neither the reply nor the model waits on `bd` or spends tokens on it.
+- the title, status, priority, type, assignee and dates
+- the beads above it, as a breadcrumb
+- its open blockers
+- the description, notes, design, acceptance criteria and close reason
+- its children with their status, summarised past 12
+
+Bead IDs in the pane are links too, so you can move through the tree from there.
+
+The mod reads beads with `bd show <id> --json` and `bd children <id> --json`. It doesn't change
+them. It looks up each bead once, after the message has drawn, and keeps the answer for the
+session. Neither the reply nor the model waits on `bd`, and the lookup uses no tokens.
 
 ## Requirements
 
-- Claude Code v2.1.317 or later, in the terminal or the desktop app.
+- Claude Code with mods, in the terminal or the desktop app. It was built and tested on v2.1.317.
 - `bd` at `/opt/homebrew/bin/bd`, with its database reachable from the shell Claude Code runs in.
 - Bead IDs with the `fp-` prefix. The prefix and the `bd` path are constants at the top of
   `hooks/register.tsx` (`ID` and `BD`).

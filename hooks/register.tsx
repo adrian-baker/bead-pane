@@ -3,9 +3,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Bead, Ref } from '../types'
 
-// A bead ID is `fp-` and three to five base-36 characters, plus `.n` for each
-// level of child (`fp-g5h6.4`, `fp-abcd.1.2`). Skip
-// one already inside a link, a code span or a path.
+// A bead ID is `fp-` and three to six base-36 characters, plus `.n` for each
+// level of child (`fp-g5h6.4`, `fp-abcd.1.2`). An ID inside a link, a code
+// span or a path is left alone.
 const ID = /(?<![\w[`/.-])fp-[a-z0-9]{3,6}(?:\.\d+)*(?![\w\]`/-])/g
 const BD = '/opt/homebrew/bin/bd'
 const BASE = 'https://beads.invalid/'
@@ -15,8 +15,7 @@ const PANE = 'bead'
 const beads = atom({ plugin: 'bead-pane', key: 'beads' } as const, {}, {
   shape: 'beads-6',
 })
-// The bead the pane shows. Hover reveals do
-// not draw on the desktop surface, so a press on an ID opens the pane instead.
+// The bead the pane shows.
 const selected = atom({ plugin: 'bead-pane', key: 'selected' } as const, null, {
   shape: 'selected-1',
 })
@@ -27,10 +26,9 @@ const expanded = atom({ plugin: 'bead-pane', key: 'expanded' } as const, null, {
   shape: 'expanded-1',
 })
 
-// One glyph per status, all from the circle family so they read as one set:
-// empty to full as work moves on, with the status colour on top. The header
-// and every list use the same glyph. Closed's green is drawn dim wherever it
-// appears: a column of full-strength green dots is the loudest thing in a list.
+// One glyph per status, from empty to full as work moves on, drawn in the
+// status colour. The header and every list use the same glyph. Closed's green
+// is drawn dim everywhere, so open and in-progress beads stand out.
 const GLYPH: Record<string, string> = {
   open: '○',
   in_progress: '◐',
@@ -80,8 +78,8 @@ const byId = (a: Ref, b: Ref): number => {
 // Bead IDs already asked about this load; a reload asks again, once each.
 const asked = new Set<string>()
 
-// Looks a bead up off the current dispatch and caches it, so a draw never
-// waits on `bd`; the atom's write redraws whatever reads it.
+// Looks a bead up after the current draw and caches it, so a draw never waits
+// on `bd`. Writing the atom redraws everything that reads it.
 function ensure($: EngineInterface, id: string): void {
   if (asked.has(id)) return
   asked.add(id)
@@ -205,13 +203,12 @@ export const register: Register = on => {
       if (target === '~all') return update($, expanded, v => (v === id ? null : id))
       return go(target)
     }
-    const md = (key: string, text: string, isDim = false) => {
+    const md = (key: string, text: string) => {
       const links = [...text.matchAll(/\]\((https:\/\/beads\.invalid\/[^)\s]+)\)/g)].map(m => m[1])
       return (
         <Markdown
           key={key}
           text={text}
-          dimColor={isDim}
           pressableLinks={links}
           onLinkPress={link => press(link.href)}
         />
@@ -243,8 +240,7 @@ export const register: Register = on => {
       .join(' › ')
 
     const status = statusOf(bead.status)
-    // A section: a small upper-case heading over its content, the same for
-    // every section, so the eye finds them by shape.
+    // A section: a small upper-case heading over its content.
     const section = (key: string, heading: string, body: unknown, color = 'subtle') => (
       <Box key={key} flexDirection="column" gap="xs">
         <Text size="caption" weight="semibold" color={color}>
@@ -253,11 +249,10 @@ export const register: Register = on => {
         {body}
       </Box>
     )
-    // A list of beads, one row each: the ID in a quiet column, a status glyph
-    // in its colour, and the title as the link. Link colour stays at full
-    // strength: dimmed link blue on a dark background is hard to read, so the
-    // glyph alone says a bead is closed. Children show only their own `.n`,
-    // since the parent's part is the bead above them.
+    // A list of beads, one row each: the ID in a grey column, the status glyph,
+    // and the title as the link. A closed bead's title isn't dimmed, because
+    // dim link blue on a dark background is hard to read. Children show only
+    // their own `.n`, since the parent's ID is in the breadcrumb.
     const list = (key: string, refs: Ref[], prefix = '') => {
       const shortOf = (r: Ref) =>
         prefix && r.id.startsWith(`${prefix}.`) ? r.id.slice(prefix.length) : r.id
@@ -340,9 +335,10 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap="lg">
         <Box flexDirection="column" gap="xs">
-          {/* The breadcrumb, always there, so moving between beads moves nothing.
-              It is the pane's only navigation: ancestors are links, and the
-              conversation's links reopen anything else. */}
+          {/* The breadcrumb row is always drawn, so the rest of the pane stays
+              in place when it moves to another bead. It is the pane's only
+              navigation: ancestors are links, and the conversation's links
+              reopen anything else. */}
           <Box>
             <Markdown
               key="trail"
@@ -354,8 +350,7 @@ export const register: Register = on => {
           <Text size="heading" weight="semibold">
             {bead.title}
           </Text>
-          {/* The properties in one line, separated so none reads as a badge,
-              and the dates under it, quieter. */}
+          {/* Status, priority, type and assignee on one line, the dates under it. */}
           <Text size="footnote">
             <Text color={status.color} dimColor={bead.status === 'closed'}>
               {GLYPH[bead.status] ?? '○'}{' '}
