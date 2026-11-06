@@ -26,6 +26,12 @@ const expanded = atom({ plugin: 'bead-pane', key: 'expanded' } as const, null, {
   shape: 'expanded-1',
 })
 
+// The beads this session has touched, by ID: what it last did to each and
+// when. Session state, so a resume keeps it and `/clear` starts it again.
+const touched = atom({ plugin: 'bead-pane', key: 'touched' } as const, {}, {
+  shape: 'touched-1',
+})
+
 // One glyph per status, from empty to full as work moves on, drawn in the
 // status colour. The header and every list use the same glyph. Closed's green
 // is drawn dim everywhere, so open and in-progress beads stand out.
@@ -150,7 +156,98 @@ function ensure($: EngineInterface, id: string): void {
   })
 }
 
+// What a `bd` command did, by its subcommand; read-only ones are absent.
+const VERB: Record<string, string> = {
+  create: 'created',
+  close: 'closed',
+  reopen: 'reopened',
+  unclaim: 'unclaimed',
+  comment: 'commented',
+  comments: 'commented',
+  dep: 'linked',
+  update: 'updated',
+}
+
+// The beads one shell command changed, and how. `bd update <id> --claim` is a
+// claim; `bd create` names its new bead only in what it prints.
+const changedBy = (command: string, stdout: string): [string, string][] => {
+  const found: [string, string][] = []
+  for (const part of command.split(/&&|\|\||;|\n|\|/)) {
+    const m = part.match(/(?:^|\s|\/)bd\s+([a-z]+)(.*)$/)
+    if (!m) continue
+    const [, sub, rest] = m
+    let how = VERB[sub]
+    if (!how) continue
+    if (sub === 'comments' && !/^\s+add\b/.test(rest)) continue
+    if (sub === 'update' && /--claim\b/.test(rest)) how = 'claimed'
+    const ids = sub === 'create' ? (stdout.match(ID) ?? []).slice(0, 1) : (rest.match(ID) ?? [])
+    for (const ref of ids) found.push([ref, how])
+  }
+  return found
+}
+
+// Adds what the beads actor has assigned to it, once per load: a bead this
+// session claimed before a reload, or in a turn whose command the mod missed.
+let isActorAsked = false
+function askActor($: EngineInterface): void {
+  if (isActorAsked) return
+  isActorAsked = true
+  $.clock.after(0, async () => {
+    const actor = await $.env.get('BEADS_ACTOR')
+    if (!actor) return
+    const ran = await $.process.run([BD, 'list', '--assignee', actor, '--all', '--json'], {
+      timeoutMs: 10000,
+    })
+    if (ran.exitCode !== 0) return
+    let rows: { id: string; updated_at?: string }[] = []
+    try {
+      rows = JSON.parse(ran.stdout) ?? []
+    } catch {
+      return
+    }
+    await update($, touched, all => {
+      const merged = { ...all }
+      for (const r of rows) {
+        if (!merged[r.id]) merged[r.id] = { how: 'assigned', at: Date.parse(r.updated_at ?? '') || 0 }
+      }
+      return merged
+    })
+  })
+}
+
 export const register: Register = on => {
+  on('session.start', async ($, e, next) => {
+    await $.command.register({
+      name: 'beads',
+      description: "Show the beads this session has claimed or worked on",
+    })
+    return next(e)
+  })
+
+  on('command.run', { command: 'beads' }, async $ => {
+    await update($, selected, () => null)
+    await $.ui.open({ id: PANE, title: 'Beads' })
+    return { text: "Opened this session's beads." }
+  })
+
+  // Records each bead a shell command changed, the main loop's or a subagent's.
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const ran = await next(e)
+    const command = typeof e.command === 'string' ? e.command : ''
+    if (!/\bbd\s/.test(command)) return ran
+    const out = (ran as { result?: { stdout?: unknown } }).result?.stdout
+    const changed = changedBy(command, typeof out === 'string' ? out : '')
+    if (changed.length > 0) {
+      const at = await $.clock.now()
+      await update($, touched, all => {
+        const merged = { ...all }
+        for (const [ref, how] of changed) merged[ref] = { how, at }
+        return merged
+      })
+    }
+    return ran
+  })
+
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const ids = [...new Set(e.props.text.match(ID) ?? [])]
     if (ids.length === 0) return next(e)
@@ -174,7 +271,7 @@ export const register: Register = on => {
         pressableLinks={links.map(id => `${BASE}${id}`)}
         onLinkPress={async link => {
           await update($, selected, () => link.href.slice(BASE.length))
-          await $.ui.open({ id: PANE, title: 'Bead' })
+          await $.ui.open({ id: PANE, title: 'Beads' })
         }}
       />
     )
@@ -184,12 +281,6 @@ export const register: Register = on => {
     const { Box, Text, Markdown } = $.ui.resolve(e)
     const id = await read($, selected)
     const all = await read($, beads)
-    if (id === null) {
-      return <Text color="subtle">Click a bead ID in the conversation to see it here.</Text>
-    }
-    const bead = all[id]
-    if (bead === undefined) return <Text color="subtle">Loading {id}…</Text>
-    if (bead === null) return <Text color="subtle">{id} is not a bead.</Text>
 
     const now = await $.clock.now()
     const isExpanded = (await read($, expanded)) === id
@@ -201,6 +292,7 @@ export const register: Register = on => {
     const press = async (href: string) => {
       const target = href.slice(BASE.length)
       if (target === '~all') return update($, expanded, v => (v === id ? null : id))
+      if (target === '~home') return update($, selected, () => null)
       return go(target)
     }
     const md = (key: string, text: string) => {
@@ -218,6 +310,79 @@ export const register: Register = on => {
     // An ID in prose keeps its hyphen from breaking the line (`fp-` / `g5h6`):
     // the label gets a non-breaking hyphen, the link keeps the real ID.
     const linkify = (text: string) => text.replace(ID, ref => link(ref, ref.replace(/-/g, '\u2011')))
+
+    // A section: a small upper-case heading over its content.
+    const section = (key: string, heading: string, body: unknown, color = 'subtle') => (
+      <Box key={key} flexDirection="column" gap="xs">
+        <Text size="caption" weight="semibold" color={color}>
+          {heading.toUpperCase()}
+        </Text>
+        {body}
+      </Box>
+    )
+    // A list of beads, one row each: the ID in a grey column, the status glyph,
+    // and the title as the link. A closed bead's title isn't dimmed, because
+    // dim link blue on a dark background is hard to read. Children show only
+    // their own `.n`, since the parent's ID is in the breadcrumb.
+    const list = (key: string, refs: Ref[], prefix = '', notes: Record<string, string> = {}) => {
+      const shortOf = (r: Ref) =>
+        prefix && r.id.startsWith(`${prefix}.`) ? r.id.slice(prefix.length) : r.id
+      // The ID column is as wide as the longest ID in this list and no wider:
+      // `.1`–`.7` take two cells, a list that reaches `.178` takes four.
+      const idWidth = Math.max(...refs.map(r => shortOf(r).length))
+      return (
+        <Box key={key} flexDirection="column">
+          {refs.map(r => (
+            <Box key={`${key}-${r.id}`} gap="xs" alignItems="flex-start">
+              <Box width={idWidth} flexShrink={0}>
+                <Text color="subtle">{shortOf(r)}</Text>
+              </Box>
+              <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
+                {GLYPH[r.status] ?? '○'}
+              </Text>
+              <Box flexGrow={1} flexShrink={1}>
+                {md(`${key}-${r.id}-title`, link(r.id, r.title || r.id))}
+              </Box>
+              {notes[r.id] && (
+                <Text size="footnote" color="subtle">
+                  {notes[r.id]}
+                </Text>
+              )}
+            </Box>
+          ))}
+        </Box>
+      )
+    }
+
+    // Home: the beads this session has touched, most recent first, with what
+    // it last did to each. The top row stays where the breadcrumb is drawn.
+    if (id === null) {
+      askActor($)
+      const seen = Object.entries(await read($, touched)).sort(([, a], [, b]) => b.at - a.at)
+      for (const [ref] of seen) if (!(ref in all)) ensure($, ref)
+      const rows: Ref[] = seen
+        .filter(([ref]) => all[ref] !== null)
+        .map(([ref]) => ({ id: ref, title: all[ref]?.title ?? '', status: all[ref]?.status ?? '' }))
+      const notes = Object.fromEntries(seen.map(([ref, t]) => [ref, t.how]))
+      return (
+        <Box flexDirection="column" gap="lg">
+          <Box flexDirection="column" gap="xs">
+            <Markdown key="trail" text="Session" />
+            <Text size="heading" weight="semibold">
+              This session's beads
+            </Text>
+          </Box>
+          {rows.length > 0 ? (
+            list('session', rows, '', notes)
+          ) : (
+            <Text color="subtle">None yet. A bead this session claims, creates, changes or closes shows here.</Text>
+          )}
+        </Box>
+      )
+    }
+    const bead = all[id]
+    if (bead === undefined) return <Text color="subtle">Loading {id}…</Text>
+    if (bead === null) return <Text color="subtle">{id} is not a bead.</Text>
 
     // The chain of beads above this one, outermost first, as far as it is known.
     const above: Ref[] = []
@@ -238,45 +403,9 @@ export const register: Register = on => {
         return i === all.length - 1 ? label : link(ref, label)
       })
       .join(' › ')
+    const crumbs = `${link('~home', 'Session')} › ${trail}`
 
     const status = statusOf(bead.status)
-    // A section: a small upper-case heading over its content.
-    const section = (key: string, heading: string, body: unknown, color = 'subtle') => (
-      <Box key={key} flexDirection="column" gap="xs">
-        <Text size="caption" weight="semibold" color={color}>
-          {heading.toUpperCase()}
-        </Text>
-        {body}
-      </Box>
-    )
-    // A list of beads, one row each: the ID in a grey column, the status glyph,
-    // and the title as the link. A closed bead's title isn't dimmed, because
-    // dim link blue on a dark background is hard to read. Children show only
-    // their own `.n`, since the parent's ID is in the breadcrumb.
-    const list = (key: string, refs: Ref[], prefix = '') => {
-      const shortOf = (r: Ref) =>
-        prefix && r.id.startsWith(`${prefix}.`) ? r.id.slice(prefix.length) : r.id
-      // The ID column is as wide as the longest ID in this list and no wider:
-      // `.1`–`.7` take two cells, a list that reaches `.178` takes four.
-      const idWidth = Math.max(...refs.map(r => shortOf(r).length))
-      return (
-        <Box key={key} flexDirection="column">
-          {refs.map(r => (
-            <Box key={`${key}-${r.id}`} gap="xs" alignItems="flex-start">
-              <Box width={idWidth} flexShrink={0}>
-                <Text color="subtle">{shortOf(r)}</Text>
-              </Box>
-              <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
-                {GLYPH[r.status] ?? '○'}
-              </Text>
-              <Box flexGrow={1} flexShrink={1}>
-                {md(`${key}-${r.id}-title`, link(r.id, r.title || r.id))}
-              </Box>
-            </Box>
-          ))}
-        </Box>
-      )
-    }
 
     const openBlockers = bead.blockedBy.filter(b => b.status !== 'closed')
     const doneBlockers = bead.blockedBy.length - openBlockers.length
@@ -337,13 +466,13 @@ export const register: Register = on => {
         <Box flexDirection="column" gap="xs">
           {/* The breadcrumb row is always drawn, so the rest of the pane stays
               in place when it moves to another bead. It is the pane's only
-              navigation: ancestors are links, and the conversation's links
-              reopen anything else. */}
+              navigation: "Session" leads to this session's beads, ancestors
+              are links, and the conversation's links reopen anything else. */}
           <Box>
             <Markdown
               key="trail"
-              text={trail}
-              pressableLinks={above.map(r => `${BASE}${r.id}`)}
+              text={crumbs}
+              pressableLinks={[`${BASE}~home`, ...above.map(r => `${BASE}${r.id}`)]}
               onLinkPress={l => press(l.href)}
             />
           </Box>

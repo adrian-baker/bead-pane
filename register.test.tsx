@@ -67,7 +67,7 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
     const text = async (key: string) => (await pane.find({ key }))?.props?.text as string | undefined
     expect(await text('desc')).toBe('Follow-up to [fp\u2011d3e4f](https://beads.invalid/fp-d3e4f).')
     expect(await text('text-Notes')).toBe('Check the fixtures first.')
-    expect(await text('trail')).toBe('[fp-p0000](https://beads.invalid/fp-p0000) › fp-a1b2c')
+    expect(await text('trail')).toBe('[Session](https://beads.invalid/~home) › [fp-p0000](https://beads.invalid/fp-p0000) › fp-a1b2c')
     expect(await pane.find({ type: 'Text', text: /^CHILDREN$/ })).toBeTruthy()
     // In ID order whatever their status, `.9` before `.10`, each by its own `.n`.
     const kidRows = (await pane.find({ key: 'kids' }))?.children ?? []
@@ -84,7 +84,7 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
 
     // A link in the description moves the pane, and the breadcrumb leads back up.
     await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/fp-d3e4f' } })
-    expect(await text('trail')).toBe('[fp-p0000](https://beads.invalid/fp-p0000) › fp-d3e4f')
+    expect(await text('trail')).toBe('[Session](https://beads.invalid/~home) › [fp-p0000](https://beads.invalid/fp-p0000) › fp-d3e4f')
     await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/fp-p0000' } })
     expect(await pane.find({ type: 'Text', text: /fp-p0000 is not a bead/ })).toBeTruthy()
     await pane.unmount()
@@ -137,4 +137,60 @@ test('a long list of children is summarised until opened', async ($, on) => {
   expect(await rows()).toBe(20)
   expect((await pane.find({ key: 'all' }))?.props?.text).toContain('Show fewer')
   await pane.unmount()
+})
+
+test("the pane's home lists the beads this session's bd commands changed", async ($, on) => {
+  on('process.run', (_, e) => {
+    const [, verb, ref] = e.argv
+    if (verb === 'list') {
+      return { value: { exitCode: 0, stdout: JSON.stringify([{ id: 'fp-old1', updated_at: '2026-11-01T00:00:00Z' }]), stderr: '' } }
+    }
+    const titles: Record<string, string> = { 'fp-new1': 'Made here', 'fp-clm1': 'Claimed here', 'fp-old1': 'Claimed before' }
+    const ok = ref in titles
+    const out = [{ id: ref, title: titles[ref], status: 'in_progress', dependencies: [] }]
+    return { value: { exitCode: ok ? 0 : 1, stdout: JSON.stringify(out), stderr: '' } }
+  })
+  on('env.get', () => ({ value: 'claude-test/1' }))
+  on('clock.after', () => ({ value: undefined }))
+  on('clock.now', () => ({ value: Date.parse('2026-11-06T00:00:00Z') }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  // The engine's Bash: `bd create` prints the new ID, the rest print nothing.
+  on('tool.call', (_, e) => ({
+    result: {
+      stdout: String(e.command).includes('create') ? 'Created issue: fp-new1' : '',
+      stderr: '',
+      interrupted: false,
+    },
+  }))
+
+  await $.tool.call({ tool: 'Bash', command: 'bd create --title="Made here" --parent=fp-epic1' })
+  await $.tool.call({ tool: 'Bash', command: 'bd update fp-clm1 --claim && bd show fp-shw1' })
+  await $.tool.call({ tool: 'Bash', command: 'git status' })
+
+  const pane = await $.ui.mount({
+    plugin: 'bead-pane',
+    component: 'Pane',
+    requestId: 'bead',
+    surface: 'desktop',
+    props: { title: 'Beads', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} },
+  })
+  // Reading the list asks bd for each bead and the actor's assignments; draw again once they're in.
+  await pane.unmount()
+  await new Promise(r => setTimeout(r, 50))
+  const again = await $.ui.mount({
+    plugin: 'bead-pane',
+    component: 'Pane',
+    requestId: 'bead',
+    surface: 'desktop',
+    props: { title: 'Beads', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} },
+  })
+  const keys = ((await again.find({ key: 'session' }))?.children ?? []).map(
+    (r: { key?: string; props?: { key?: string } }) => r.key ?? r.props?.key,
+  )
+  // `bd show` changes nothing, so fp-shw1 is absent; the parent of a create isn't touched.
+  expect(keys.sort()).toEqual(['session-fp-clm1', 'session-fp-new1', 'session-fp-old1'])
+  expect(await again.find({ type: 'Text', text: /^claimed$/ })).toBeTruthy()
+  expect(await again.find({ type: 'Text', text: /^created$/ })).toBeTruthy()
+  expect(await again.find({ type: 'Text', text: /^assigned$/ })).toBeTruthy()
+  await again.unmount()
 })

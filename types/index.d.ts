@@ -25,6 +25,7 @@ declare module 'claude-code' {
       beads: Shaped<Record<string, Bead | null>>
       selected: Shaped<string | null>
       expanded: Shaped<string | null>
+      touched: Shaped<Record<string, { how: string; at: number }>>
     }
   }
 }

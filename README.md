@@ -12,6 +12,12 @@ pane. The pane shows:
 
 Bead IDs in the pane are links too, so you can move through the tree from there.
 
+The pane's home, `/beads` or "Session" in the breadcrumb, lists the beads this session has
+touched, most recent first, with what it last did to each. The mod adds a bead when a `bd`
+command in the session claims, creates, updates, comments on, links, closes or reopens it,
+including a subagent's command. It also adds the beads assigned to the session's `BEADS_ACTOR`,
+which covers a claim made before the mod loaded.
+
 The mod reads beads with `bd show <id> --json` and `bd children <id> --json`. It doesn't change
 them. It looks up each bead once, after the message has drawn, and keeps the answer for the
 session. Neither the reply nor the model waits on `bd`, and the lookup uses no tokens.
