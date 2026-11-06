@@ -1296,12 +1296,12 @@ export const register: Register = (on, options) => {
                 // title line tall, so the icon centres on the first line.
                 <Box alignItems="center" flexShrink={0}>
                   <Svg key="type-icon" alt={bead.type} {...titleIcon} isInteractive />
-                  <Text size="heading" weight="semibold">
+                  <Text size="title" weight="semibold">
                     {'\u200b'}
                   </Text>
                 </Box>
               )}
-              <Text size="heading" weight="semibold">
+              <Text size="title" weight="semibold">
                 {bead.title}
               </Text>
             </Box>
