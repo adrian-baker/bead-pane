@@ -602,6 +602,11 @@ export const register: Register = (on, options) => {
     const { Box, Text, Markdown, Button } = elements
     // The terminal draws no SVG, so its headings go without an icon.
     const Svg = 'Svg' in elements ? elements.Svg : null
+    // The cells an ID column needs for an ID. A cell is about 8px; an ID in
+    // the body font takes about 0.8 of one a character on a desktop, and one
+    // in the terminal's fixed width.
+    const cellsFor = (text: string) =>
+      e.surface === 'terminal' ? text.length : Math.ceil(text.length * 0.85)
     const found = await read($, setup)
     if (found?.kind !== 'ready') {
       ensureSetup($, bd)
@@ -825,7 +830,7 @@ export const register: Register = (on, options) => {
       // `.9` or `.11`, right-aligned so it lines up on its last digit, as in a
       // table; a full ID is left-aligned, since they all start alike.
       // A given width is the whole tree's column; otherwise it fits this list.
-      const idWidth = width ?? Math.max(...refs.map(r => shortOf(r).length))
+      const idWidth = width ?? Math.max(...refs.map(r => cellsFor(shortOf(r))))
       // A priority slot only when some row has one, kept for every row so the
       // titles line up.
       const hasPriority = refs.some(r => r.priority !== undefined)
@@ -1016,10 +1021,10 @@ export const register: Register = (on, options) => {
           ...groupsOf(rows).flatMap(g =>
             g.parent
               ? [
-                  g.parent.id.length,
-                  ...g.rows.map(r => BRANCH_CELLS + 1 + childIdOf(r, g.parent?.id ?? '').length),
+                  cellsFor(g.parent.id),
+                  ...g.rows.map(r => BRANCH_CELLS + 1 + cellsFor(childIdOf(r, g.parent?.id ?? ''))),
                 ]
-              : g.rows.map(r => r.id.length),
+              : g.rows.map(r => cellsFor(r.id)),
           ),
         )
       const tree = (
