@@ -265,14 +265,6 @@ export const changedBy = (
       return ids.map(id => ({ id, how }))
     })
 
-// The breadcrumb's labels: each ID below the first by its own `.n` where it
-// nests in the one before (`demo-g5h6 › .5 › .1`).
-export const trailLabels = (ids: readonly string[]): string[] =>
-  ids.map((id, i) => {
-    const prev = ids[i - 1]
-    return prev && id.startsWith(`${prev}.`) ? id.slice(prev.length) : id
-  })
-
 // The order statuses take in the progress bar and the counts: done first,
 // then work under way, then work waiting. A status bd adds later goes last.
 const ORDER = ['closed', 'in_progress', 'blocked', 'open', 'deferred']

@@ -29,7 +29,6 @@ import {
   parsePrefix,
   parseShown,
   summarised,
-  trailLabels,
   typeIcon,
   progressBar,
   underParents,
@@ -46,6 +45,8 @@ const CONFIGURE = '/plugin configure bead-pane@bead-pane'
 // through the row and turns into it, ending in a rounded elbow on the last.
 const BRANCH_WIDTH = 14
 const BRANCH_HEIGHT = 22
+// The cells of an ID column the branch takes, at about 8px a cell.
+const BRANCH_CELLS = 2
 const BRANCH_COLOUR = '#5a5a5a'
 const branchSvg = (isLast: boolean): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${BRANCH_WIDTH} ${BRANCH_HEIGHT}" ` +
@@ -737,7 +738,8 @@ export const register: Register = (on, options) => {
       <Box key={key} flexDirection="column" gap="xs">
         <Box gap="xs" alignItems="center">
           {icon && Svg && (
-            <Svg key={`${key}-icon`} alt="" width={13} height={13} source={iconSvg(icon)} />
+            // Every Svg has an `alt`: a desktop draws none of one without.
+            <Svg key={`${key}-icon`} alt={heading} width={13} height={13} source={iconSvg(icon)} />
           )}
           <Text size="caption" weight="semibold" color={color}>
             {heading.toUpperCase()}
@@ -811,22 +813,28 @@ export const register: Register = (on, options) => {
         <Box key={key} flexDirection="column" gap={spaced && !isBranch ? 'xs' : undefined}>
           {refs.map((r, i) => (
             <Box key={`${rowKey}-${r.id}`} gap="xs" alignItems="flex-start">
-              {/* A child's branch back to its parent, one line tall: drawn
-                  where the surface draws SVG, box characters in the terminal.
-                  The rows touch, so the line runs on to the next child. */}
-              {isBranch &&
-                (Svg ? (
-                  <Svg
-                    key={`${rowKey}-${r.id}-branch`}
-                    alt=""
-                    width={BRANCH_WIDTH}
-                    height={BRANCH_HEIGHT}
-                    source={branchSvg(i === refs.length - 1)}
-                  />
-                ) : (
-                  <Text color="subtle">{i === refs.length - 1 ? '└' : '├'}</Text>
-                ))}
-              <Box width={idWidth} flexShrink={0} justifyContent={align}>
+              {/* A child's branch back to its parent sits at the start of the
+                  ID column, under the parent's ID, and the child's own ID at
+                  its end: one line tall, drawn where the surface draws SVG,
+                  box characters in the terminal. The rows touch, so the line
+                  runs on to the next child. */}
+              <Box
+                width={idWidth}
+                flexShrink={0}
+                justifyContent={isBranch ? 'space-between' : align}
+              >
+                {isBranch &&
+                  (Svg ? (
+                    <Svg
+                      key={`${rowKey}-${r.id}-branch`}
+                      alt={i === refs.length - 1 ? '└' : '├'}
+                      width={BRANCH_WIDTH}
+                      height={BRANCH_HEIGHT}
+                      source={branchSvg(i === refs.length - 1)}
+                    />
+                  ) : (
+                    <Text color="subtle">{i === refs.length - 1 ? '└' : '├'}</Text>
+                  ))}
                 <Text color="subtle">{shortOf(r)}</Text>
               </Box>
               <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
@@ -923,13 +931,21 @@ export const register: Register = (on, options) => {
           .map(g => ({ ...g, rows: g.parent ? g.rows : g.rows.filter(r => !parentIds.has(r.id)) }))
           .filter(g => g.parent || g.rows.length > 0)
       }
-      // One ID column for the top-level rows of both lists, so their glyphs
-      // and titles line up; children are indented under their parent.
+      // One ID column for every row of both lists, children included, so all
+      // glyphs, priorities and titles line up. A child's cell holds its
+      // branch, its `.n` and a cell between them.
+      const childIdOf = (r: Ref, parentId: string) =>
+        r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
       const widthOf = (rows: Ref[]) =>
         Math.max(
           0,
           ...groupsOf(rows).flatMap(g =>
-            g.parent ? [g.parent.id.length] : g.rows.map(r => r.id.length),
+            g.parent
+              ? [
+                  g.parent.id.length,
+                  ...g.rows.map(r => BRANCH_CELLS + 1 + childIdOf(r, g.parent?.id ?? '').length),
+                ]
+              : g.rows.map(r => r.id.length),
           ),
         )
       const tree = (
@@ -965,24 +981,17 @@ export const register: Register = (on, options) => {
                     false,
                     topWidth,
                   )}
-                  {/* The children hang off a line drawn down from the parent's
-                      glyph, with their IDs left-aligned after the branch. */}
-                  <Box gap="xs">
-                    <Box width={topWidth} flexShrink={0} />
-                    <Box flexGrow={1} flexShrink={1}>
-                      {list(
-                        `${key}-group-${group.parent.id}`,
-                        group.rows,
-                        group.parent.id,
-                        rowNotes,
-                        false,
-                        key,
-                        true,
-                        null,
-                        true,
-                      )}
-                    </Box>
-                  </Box>
+                  {list(
+                    `${key}-group-${group.parent.id}`,
+                    group.rows,
+                    group.parent.id,
+                    rowNotes,
+                    false,
+                    key,
+                    true,
+                    topWidth,
+                    true,
+                  )}
                 </Box>
               ),
             )}
@@ -1029,13 +1038,11 @@ export const register: Register = (on, options) => {
       [...above, ...bead.blockedBy].flatMap(r => (r.id in all ? [] : [r.id])),
     )
 
-    // The breadcrumb: "Beads" for the pane's list, then each bead above, then
-    // this one, unlinked. In the body font, not code: a desktop draws a
-    // link's code as plain text, so code would set only the last ID apart.
-    const chain = [...above.map(r => r.id), id]
-    const trail = trailLabels(chain)
-      .map((label, i) => (i === chain.length - 1 ? label : link(chain[i] ?? '', label)))
-      .join(' › ')
+    // The breadcrumb: ☰ for the pane's list, then each bead above, then
+    // this one. As in the lists, a bead's link is its title and its ID is
+    // grey: each ancestor by its title, shortened, and this bead by its ID.
+    const shortTitle = (title: string) =>
+      title.length <= 32 ? title : `${title.slice(0, 32).replace(/\s+\S*$/, '')}…`
     // A wait longer than OPENING_MS names the bead being opened in the
     // breadcrumb, so a slow click still shows. Nothing below it moves.
     if (!isWaiting) waiting = null
@@ -1044,18 +1051,37 @@ export const register: Register = (on, options) => {
       showOpeningLater($)
     }
     const isOpeningShown = waiting !== null && nowMs - waiting.sinceMs >= OPENING_MS
-    const crumbs = isOpeningShown
-      ? `${link('~home', 'Beads')} › ${wanted} · *opening…*`
-      : `${link('~home', 'Beads')} › ${trail}`
+    const steps: { to: string; label: string }[] = isOpeningShown
+      ? [{ to: '', label: `${wanted} · opening…` }]
+      : [
+          ...above.map(r => ({ to: r.id, label: shortTitle(r.title || r.id) })),
+          { to: '', label: id },
+        ]
+    const crumbs = (
+      <Box key="trail" gap="xs" alignItems="center" flexWrap="wrap">
+        {md('crumb-home', link('~home', '☰'))}
+        {steps.flatMap(step => [
+          <Text key={`sep-${step.label}`} color="subtle">
+            ›
+          </Text>,
+          step.to === '' ? (
+            <Text key={`crumb-${step.label}`} color="subtle">
+              {step.label}
+            </Text>
+          ) : (
+            md(`crumb-${step.to}`, link(step.to, step.label))
+          ),
+        ])}
+      </Box>
+    )
 
     const status = statusOf(bead.status)
     const refHref = bead.externalRef === '' ? null : refUrl(bead.externalRef, repo)
 
     const isBlocked = bead.blockedBy.some(b => b.status !== 'closed')
-    // Centred on the title's line, the icon centres on the capitals. At 14px
-    // a boxed icon, such as a task's, is as tall as they are; a larger one
-    // overhangs them and reads as off-centre whichever way it is nudged.
-    const titleIcon = typeIcon(bead.type, 14)
+    // Centred on the title's line, the icon centres on the capitals, a
+    // little taller than they are.
+    const titleIcon = typeIcon(bead.type, 16)
 
     // Children whose IDs nest under this bead's come first, in ID order, so
     // they set the ID column; a child filed elsewhere comes after them.
@@ -1127,7 +1153,11 @@ export const register: Register = (on, options) => {
             </Text>
           )}
           {Svg ? (
-            <Svg key="bar" alt="" {...progressBar(runs)} />
+            <Svg
+              key="bar"
+              alt={`${kids.filter(k => k.status === 'closed').length} of ${kids.length} closed`}
+              {...progressBar(runs)}
+            />
           ) : (
             <Text size="caption">
               {runs.map(([st, n]) => (
@@ -1155,12 +1185,12 @@ export const register: Register = (on, options) => {
           <Box flexDirection="column" gap="xs">
             {/* The breadcrumb row is always drawn, so the rest of the pane stays
               in place when it moves to another bead. It is the pane's only
-              navigation: "Beads" leads to this session's beads, ancestors
+              navigation: ☰ leads to this session's beads, ancestors
               are links, and the conversation's links reopen anything else. */}
-            <Box>{md('trail', crumbs)}</Box>
+            {crumbs}
             {/* The type's icon leads the title, so an epic, a task and a bug
               look different at a glance; the status line names the type. */}
-            <Box gap="sm" alignItems="flex-start">
+            <Box gap="xs" alignItems="flex-start">
               {Svg && titleIcon && (
                 // A zero-width character in the title's size makes this box one
                 // title line tall, so the icon centres on the first line.

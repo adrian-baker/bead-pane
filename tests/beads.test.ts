@@ -19,7 +19,6 @@ import {
   parseComments,
   parseShown,
   summarised,
-  trailLabels,
   underParents,
 } from '../hooks/beads'
 import { row } from './fake-bd'
@@ -94,15 +93,6 @@ test('a summarised list shows the work left, or the first when all are closed', 
   expect(
     summarised([ref('demo-a.1', 'closed'), ref('demo-a.2', 'closed')], 1).map(k => k.id),
   ).toEqual(['demo-a.1'])
-})
-
-test('the breadcrumb shortens each ID that nests in the one before', () => {
-  expect(trailLabels(['demo-g5h6', 'demo-g5h6.5', 'demo-g5h6.5.1', 'demo-x1y2'])).toEqual([
-    'demo-g5h6',
-    '.5',
-    '.1',
-    'demo-x1y2',
-  ])
 })
 
 test('viewing or linking a bead is not working on it', () => {

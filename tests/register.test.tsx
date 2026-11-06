@@ -38,6 +38,19 @@ const settle = async (clock: MockClock) => {
 const textOf = (el: { props?: unknown } | undefined): unknown =>
   (el?.props as { text?: unknown } | undefined)?.text
 
+// The breadcrumb as one line: each link's markdown and each grey part's text.
+type Drawn = { type?: string; props?: { text?: unknown }; children?: unknown }
+const flat = (n: unknown): string[] => {
+  if (typeof n === 'string') return [n]
+  if (Array.isArray(n)) return n.flatMap(flat)
+  const d = n as Drawn
+  if (d?.type === 'Markdown') return [String(d.props?.text)]
+  if (d?.type === 'Text') return [flat(d.children).join('')]
+  return flat(d?.children ?? [])
+}
+const trailOf = async (pane: { find: (q: { key: string }) => Promise<unknown> }) =>
+  flat((await pane.find({ key: 'trail' })) as Drawn).join(' ')
+
 const keysOf = (children: unknown): unknown[] =>
   Array.isArray(children)
     ? children.map((r: { key?: unknown; props?: { key?: unknown } }) => r.key ?? r.props?.key)
@@ -94,8 +107,8 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   const text = async (key: string) => textOf(await pane.find({ key }))
   expect(await text('desc')).toBe('Follow-up to [demo‑d3e4f](https://beads.invalid/demo-d3e4f).')
   expect(await text('text-Notes')).toBe('Check the fixtures first.')
-  expect(await text('trail')).toBe(
-    '[Beads](https://beads.invalid/~home) › [demo-p0000](https://beads.invalid/demo-p0000) › demo-a1b2c',
+  expect(await trailOf(pane)).toBe(
+    '[☰](https://beads.invalid/~home) › [The epic](https://beads.invalid/demo-p0000) › demo-a1b2c',
   )
   // The children mix a bug and a task, so each row has its type's icon,
   // after the title's own.
@@ -120,9 +133,9 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   await clock.advance(1000)
   await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/demo-d3e4f' } })
   await settle(clock)
-  expect(await text('trail')).toBe('[Beads](https://beads.invalid/~home) › demo-d3e4f')
+  expect(await trailOf(pane)).toBe('[☰](https://beads.invalid/~home) › demo-d3e4f')
   // The reply's links are in the list as mentioned. Opening a bead adds nothing.
-  await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/~home' } })
+  await pane.press({ key: 'crumb-home', link: { href: 'https://beads.invalid/~home' } })
   await settle(clock)
   // demo-a1b2c sits under its parent's title; demo-g5h6.4 has none here.
   // Its parent is a row of its own, with its title as a link.
@@ -136,7 +149,7 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
 
   // Back to the bead from the conversation, and up to a parent bd doesn't know.
   await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
-  await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/demo-p0000' } })
+  await pane.press({ key: 'crumb-demo-p0000', link: { href: 'https://beads.invalid/demo-p0000' } })
   await settle(clock)
   expect(
     await pane.find({ type: 'Text', text: /demo-p0000 is not a bead in this project/ }),
@@ -591,14 +604,10 @@ test('moving to a bead not yet looked up keeps the last one until it loads', asy
   await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/demo-zz11' } })
   // A quick lookup just swaps the bead in: until it's back, the pane shows the
   // bead it had, with no "opening…" and no "Loading…".
-  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
-    '[Beads](https://beads.invalid/~home) › demo-a1b2c',
-  )
+  expect(await trailOf(pane)).toBe('[☰](https://beads.invalid/~home) › demo-a1b2c')
   expect(await pane.find({ type: 'Text', text: /Loading/ })).toBeFalsy()
   await settle(clock)
-  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
-    '[Beads](https://beads.invalid/~home) › demo-zz11',
-  )
+  expect(await trailOf(pane)).toBe('[☰](https://beads.invalid/~home) › demo-zz11')
   await pane.unmount()
   await ui.unmount()
 })
@@ -629,14 +638,10 @@ test('a slow lookup names the bead being opened after a moment', async ($, on) =
   await settle(clock)
   await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/demo-zz11' } })
   await clock.advance(300)
-  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
-    '[Beads](https://beads.invalid/~home) › demo-zz11 · *opening…*',
-  )
+  expect(await trailOf(pane)).toBe('[☰](https://beads.invalid/~home) › demo-zz11 · opening…')
   await clock.advance(2000)
   await settle(clock)
-  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
-    '[Beads](https://beads.invalid/~home) › demo-zz11',
-  )
+  expect(await trailOf(pane)).toBe('[☰](https://beads.invalid/~home) › demo-zz11')
   await pane.unmount()
   await ui.unmount()
 })
@@ -763,13 +768,11 @@ test('moving up to a parent with comments waits for them, then switches once', a
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   // The parent is cached as an ancestor, without its comments.
-  await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/demo-epic3' } })
+  await pane.press({ key: 'crumb-demo-epic3', link: { href: 'https://beads.invalid/demo-epic3' } })
   // Until they're in, the pane still shows the child.
-  expect(textOf(await pane.find({ key: 'trail' }))).toMatch(/› \.1$/)
+  expect(await trailOf(pane)).toMatch(/› demo-epic3\.1$/)
   await settle(clock)
-  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
-    '[Beads](https://beads.invalid/~home) › demo-epic3',
-  )
+  expect(await trailOf(pane)).toBe('[☰](https://beads.invalid/~home) › demo-epic3')
   expect(await pane.find({ type: 'Text', text: 'COMMENTS' })).toBeTruthy()
   await pane.unmount()
   await ui.unmount()
@@ -835,7 +838,7 @@ test('a click from the list waits on the list, never on a bead shown before it',
   await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-aaa1' } })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
-  await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/~home' } })
+  await pane.press({ key: 'crumb-home', link: { href: 'https://beads.invalid/~home' } })
   await settle(clock)
 
   // demo-bbb2's comments aren't in yet: the pane keeps the list, not demo-aaa1.
@@ -846,9 +849,7 @@ test('a click from the list waits on the list, never on a bead shown before it',
   expect(await pane.find({ key: 'mentioned-section' })).toBeTruthy()
   expect(await pane.find({ key: 'trail' })).toBeFalsy()
   await settle(clock)
-  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
-    '[Beads](https://beads.invalid/~home) › demo-bbb2',
-  )
+  expect(await trailOf(pane)).toBe('[☰](https://beads.invalid/~home) › demo-bbb2')
   await pane.unmount()
   await ui.unmount()
 })
