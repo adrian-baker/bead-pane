@@ -836,6 +836,9 @@ export const register: Register = (on, options) => {
                 width={idWidth}
                 flexShrink={0}
                 justifyContent={isBranch ? 'space-between' : align}
+                // Stretched to the row, a Box centres what it holds on a
+                // desktop: the ID, branch and priority stay on the first line.
+                alignItems="flex-start"
                 {...(Svg && (hasStem || (isBranch && i < refs.length - 1))
                   ? { overflow: 'hidden' as const }
                   : {})}
@@ -875,7 +878,7 @@ export const register: Register = (on, options) => {
               {/* The bead's priority, read with its title; dim once closed,
                   as its glyph is. */}
               {hasPriority && (
-                <Box width={2} flexShrink={0}>
+                <Box width={2} flexShrink={0} alignItems="flex-start">
                   {r.priority !== undefined && (
                     <Text color={priorityColor(r.priority)} dimColor={r.status === 'closed'}>
                       P{r.priority}
