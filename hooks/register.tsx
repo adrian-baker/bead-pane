@@ -328,8 +328,9 @@ let isRefreshPending = false
 // reads `pulse`, so an open pane draws after each bump. A pane that hasn't
 // drawn since the last bump is closed, and a refresh then skips its lookup.
 let lastDrawMs = 0
-// The last bead the pane drew in full.
-let lastShown: string | null = null
+// What the pane last drew in full: a bead, null for the session's list, or
+// undefined before its first draw.
+let lastShown: string | null | undefined = undefined
 // The bead the pane is waiting to draw, and since when. A lookup that takes
 // longer than OPENING_MS shows "opening…"; a quicker one just swaps in.
 let waiting: { id: string; sinceMs: number } | null = null
@@ -607,13 +608,16 @@ export const register: Register = (on, options) => {
       commentsPending.add(wanted)
       refresh($, bd, [wanted])
     }
+    // It waits on the view it last drew, the list or a bead, so a click from
+    // the list never shows a bead from earlier in between.
+    const canWait =
+      lastShown === null || (lastShown !== undefined && all[lastShown]?.kind === 'found')
     const isWaiting =
       wanted !== null &&
       wanted !== lastShown &&
       (wantedEntry === undefined || commentsPending.has(wanted)) &&
-      lastShown !== null &&
-      all[lastShown]?.kind === 'found'
-    const id = isWaiting ? lastShown : wanted
+      canWait
+    const id = isWaiting ? (lastShown ?? null) : wanted
 
     const nowMs = await $.clock.now()
     await read($, pulse)
@@ -813,6 +817,7 @@ export const register: Register = (on, options) => {
     // Home: the beads this session has touched, most recent first, with what
     // it last did to each. The pane's title says what it is.
     if (id === null) {
+      lastShown = null
       askActor($, bd)
       const seen = Object.entries(await read($, touched)).sort(([, a], [, b]) => b.atMs - a.atMs)
       ensure(

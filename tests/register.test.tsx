@@ -791,3 +791,45 @@ test("a link to a file that isn't here goes to its copy on a pushed branch", asy
   await pane.unmount()
   await ui.unmount()
 })
+
+test('a click from the list waits on the list, never on a bead shown before it', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  on(
+    'process.run',
+    fakeBd({
+      beads: {
+        'demo-aaa1': row('demo-aaa1', { title: 'First' }),
+        'demo-bbb2': row('demo-bbb2', { title: 'Second', comment_count: 1 }),
+      },
+      comments: {
+        'demo-bbb2': [{ author: 'Ana', text: 'Note.', created_at: '2026-11-05T12:00:00Z' }],
+      },
+    }),
+  )
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+  const ui = await $.ui.mount(message('See demo-aaa1 and demo-bbb2.'))
+  await settle(clock)
+  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-aaa1' } })
+  const pane = await $.ui.mount(PANE)
+  await settle(clock)
+  await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/~home' } })
+  await settle(clock)
+
+  // demo-bbb2's comments aren't in yet: the pane keeps the list, not demo-aaa1.
+  await pane.press({
+    key: 'mentioned-demo-bbb2-title',
+    link: { href: 'https://beads.invalid/demo-bbb2' },
+  })
+  expect(await pane.find({ key: 'mentioned-section' })).toBeTruthy()
+  expect(await pane.find({ key: 'trail' })).toBeFalsy()
+  await settle(clock)
+  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
+    '[≡](https://beads.invalid/~home) › demo-bbb2',
+  )
+  await pane.unmount()
+  await ui.unmount()
+})
