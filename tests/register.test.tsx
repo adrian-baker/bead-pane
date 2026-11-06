@@ -104,6 +104,8 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   ])
   expect(await text('kids-demo-a1b2c.9-title')).toBe('[Ninth](https://beads.invalid/demo-a1b2c.9)')
   expect(await pane.find({ type: 'Text', text: /^\.10$/ })).toBeTruthy()
+  // The open child shows its priority; the closed one doesn't.
+  expect(await pane.findAll({ type: 'Text', text: /^P2$/ })).toHaveLength(1)
   expect(await pane.find({ key: 'text-resolution' })).toBeFalsy()
   expect(await pane.find({ type: 'Text', text: /P3/ })).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: /Its blocker is closed/ })).toBeTruthy()

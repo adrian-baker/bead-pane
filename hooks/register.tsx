@@ -792,6 +792,12 @@ export const register: Register = (on, options) => {
                   {notes[r.id]}
                 </Text>
               )}
+              {/* An open bead's priority; a closed one's no longer matters. */}
+              {r.priority !== undefined && r.status !== 'closed' && (
+                <Text size="footnote" color={priorityColor(r.priority)}>
+                  P{r.priority}
+                </Text>
+              )}
             </Box>
           ))}
         </Box>

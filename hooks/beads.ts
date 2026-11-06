@@ -85,7 +85,14 @@ const ms = (v: unknown): number | null => {
 }
 
 const refOf = (r: Row): Ref | null =>
-  typeof r.id === 'string' ? { id: r.id, title: str(r.title), status: str(r.status) } : null
+  typeof r.id === 'string'
+    ? {
+        id: r.id,
+        title: str(r.title),
+        status: str(r.status),
+        ...(typeof r.priority === 'number' ? { priority: r.priority } : {}),
+      }
+    : null
 const refs = (v: unknown): Ref[] => rows(v).flatMap(r => refOf(r) ?? [])
 
 // `demo-g5h6.10` after `demo-g5h6.9`: the numeric parts compare as numbers.

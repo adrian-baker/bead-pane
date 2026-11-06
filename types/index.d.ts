@@ -1,4 +1,5 @@
-export type Ref = { id: string; title: string; status: string }
+// `priority` where bd gave one, as it does for children and blockers.
+export type Ref = { id: string; title: string; status: string; priority?: number }
 
 export type Comment = { author: string; text: string; createdMs: number | null }
 
