@@ -412,7 +412,6 @@ export const datedEntries = (text: string): { when: string; text: string }[] | n
 // grey that reads on a light or a dark pane: an SVG draws as an image, so it
 // can't take the theme's colours.
 const ICON_PATHS = {
-  description: 'M3 4.5h10M3 8h10M3 11.5h6',
   notes: 'M3.5 2.5h9v11h-9zM6 6h4M6 9h4',
   design: 'M3 13l.8-3L10.5 3.3l2.2 2.2L6 12.2zM9.3 4.5l2.2 2.2',
   acceptance: 'M2.5 4.5l1.2 1.2 2-2.2M7.5 4.8h6M2.5 10.5l1.2 1.2 2-2.2M7.5 10.8h6',

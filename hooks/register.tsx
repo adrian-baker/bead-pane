@@ -1104,6 +1104,9 @@ export const register: Register = (on, options) => {
               .join(' · ')}
           </Text>
         </Box>
+        {/* The bead's main text, under its title as an issue's body is, so it
+            needs no heading of its own. */}
+        {bead.description.trim() !== '' && md('desc', linkify(bead.description))}
         {openBlockers.length > 0 &&
           section('blockers', 'Blocked by', list('blocker-list', openBlockers), 'error')}
         {openBlockers.length === 0 && doneBlockers > 0 && (
@@ -1117,15 +1120,6 @@ export const register: Register = (on, options) => {
           </Text>
         )}
         {isEpic && children}
-        {bead.description.trim() !== '' &&
-          section(
-            'description',
-            'Description',
-            md('desc', linkify(bead.description)),
-            'subtle',
-            null,
-            'description',
-          )}
         {bead.status === 'closed' &&
           bead.closeReason.trim() !== '' &&
           section(
