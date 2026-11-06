@@ -59,6 +59,13 @@ const branchSvg = (isLast: boolean): string =>
       : `M6 0V${BRANCH_HEIGHT}M6 ${BRANCH_HEIGHT / 2}H14`
   }"/></svg>`
 
+// The tree's line below a wrapped row's first line, longer than any row.
+const STEM_HEIGHT = 400
+const STEM_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${BRANCH_WIDTH} ${STEM_HEIGHT}" ` +
+  `fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5">` +
+  `<path d="M6 ${BRANCH_HEIGHT}V${STEM_HEIGHT}"/></svg>`
+
 const EXTRA_ICONS: Record<string, IconName> = {
   Notes: 'notes',
   Design: 'design',
@@ -792,6 +799,7 @@ export const register: Register = (on, options) => {
       isRightAligned = parentId !== '',
       width: number | null = null,
       isBranch = false,
+      hasStem = false,
     ) => {
       const shortOf = (r: Ref) =>
         parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
@@ -817,7 +825,8 @@ export const register: Register = (on, options) => {
       return (
         <Box key={key} flexDirection="column" gap={spaced && !isBranch ? 'xs' : undefined}>
           {refs.map((r, i) => (
-            <Box key={`${rowKey}-${r.id}`} gap="xs" alignItems="flex-start">
+            // Stretched, so the ID cell is as tall as a title that wraps.
+            <Box key={`${rowKey}-${r.id}`} gap="xs" alignItems="stretch">
               {/* A child's branch back to its parent sits at the start of the
                   ID column, under the parent's ID, and the child's own ID at
                   its end: one line tall, drawn where the surface draws SVG,
@@ -827,7 +836,25 @@ export const register: Register = (on, options) => {
                 width={idWidth}
                 flexShrink={0}
                 justifyContent={isBranch ? 'space-between' : align}
+                {...(Svg && (hasStem || (isBranch && i < refs.length - 1))
+                  ? { overflow: 'hidden' as const }
+                  : {})}
               >
+                {/* Where the row wraps, the tree's line runs on below its
+                    first line to the next row: under a parent's ID, or a
+                    child's branch with siblings after it. Drawn long and
+                    clipped by the cell, as an SVG can't stretch. */}
+                {Svg && (hasStem || (isBranch && i < refs.length - 1)) && (
+                  <Box position="absolute" top={0} left={0}>
+                    <Svg
+                      key={`${rowKey}-${r.id}-stem`}
+                      alt="│"
+                      width={BRANCH_WIDTH}
+                      height={STEM_HEIGHT}
+                      source={STEM_SVG}
+                    />
+                  </Box>
+                )}
                 {isBranch &&
                   (Svg ? (
                     <Svg
@@ -859,7 +886,13 @@ export const register: Register = (on, options) => {
               {/* A zero-width character makes the slot one line tall, so the
                   icon centres on the title's first line. */}
               {Svg && showsTypes && (
-                <Box width={2} flexShrink={0} alignItems="center" justifyContent="center">
+                <Box
+                  width={2}
+                  flexShrink={0}
+                  alignItems="center"
+                  justifyContent="center"
+                  alignSelf="flex-start"
+                >
                   {typeOf(r)}
                   <Text>{'​'}</Text>
                 </Box>
@@ -985,6 +1018,8 @@ export const register: Register = (on, options) => {
                     key,
                     false,
                     topWidth,
+                    false,
+                    group.rows.length > 0,
                   )}
                   {list(
                     `${key}-group-${group.parent.id}`,

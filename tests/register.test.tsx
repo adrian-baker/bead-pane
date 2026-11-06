@@ -144,6 +144,10 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   )
   expect(await pane.find({ key: 'mentioned-demo-a1b2c' })).toBeTruthy()
   expect(await pane.find({ key: 'mentioned-demo-g5h6.4' })).toBeTruthy()
+  // The parent's line runs on under its ID, should its title wrap, to its
+  // one child's elbow.
+  const tree = (await pane.findAll({ type: 'Svg' })).map(s => (s.props as { alt?: string }).alt)
+  expect(tree).toEqual(['│', '└'])
   expect(await pane.find({ key: 'worked-section' })).toBeFalsy()
   expect(await pane.find({ type: 'Text', text: /^mentioned$/ })).toBeFalsy()
 
