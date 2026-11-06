@@ -30,7 +30,7 @@ import {
   parseShown,
   summarised,
   trailLabels,
-  typeIconSvg,
+  typeIcon,
   underParents,
   relinkFiles,
 } from './beads'
@@ -672,9 +672,9 @@ export const register: Register = (on, options) => {
       )
     }
     const link = (to: string, label = to) => `[${label}](${BASE}${to})`
-    // An ID in prose is monospaced, as in the ID columns, and keeps its hyphen
-    // from breaking the line (`demo-` / `g5h6`): the label gets a non-breaking
-    // hyphen, the link keeps the real ID.
+    // Every ID is in the body font, as a desktop draws a link's code as plain
+    // text. An ID in prose keeps its hyphen from breaking the line (`demo-` /
+    // `g5h6`): the label gets a non-breaking hyphen, the link the real ID.
     const repo = found.repo
     // The files the shown bead links to that aren't in the session's folder,
     // such as a design still on an open pull request's branch.
@@ -700,7 +700,7 @@ export const register: Register = (on, options) => {
       fileExists.get(path) === false ? (fileElsewhere.get(path) ?? null) : undefined
     const linkify = (text: string) => {
       const withBeads = linkIds(relinkFiles(text, fileTarget), prefix, ref =>
-        link(ref, `\`${ref.replace(/-/g, '‑')}\``),
+        link(ref, ref.replace(/-/g, '‑')),
       )
       return keepLineBreaks(repo ? linkGitHub(withBeads, repo) : withBeads)
     }
@@ -796,6 +796,16 @@ export const register: Register = (on, options) => {
       // titles line up.
       const hasPriority = refs.some(r => r.priority !== undefined)
       const align = isRightAligned ? 'flex-end' : 'flex-start'
+      // Each row's type icon, smaller and fainter than the title's, only in
+      // a list that mixes types: in one of tasks alone it would say nothing.
+      const showsTypes = new Set(refs.flatMap(r => (r.type ? [r.type] : []))).size > 1
+      const typeOf = (r: Ref) => {
+        const icon = Svg && r.type ? typeIcon(r.type, 13, 1, 0.7) : null
+        return (
+          Svg &&
+          icon && <Svg key={`${rowKey}-${r.id}-type`} alt={r.type ?? ''} {...icon} isInteractive />
+        )
+      }
       return (
         <Box key={key} flexDirection="column" gap={spaced && !isBranch ? 'xs' : undefined}>
           {refs.map((r, i) => (
@@ -816,11 +826,7 @@ export const register: Register = (on, options) => {
                   <Text color="subtle">{i === refs.length - 1 ? '└' : '├'}</Text>
                 ))}
               <Box width={idWidth} flexShrink={0} justifyContent={align}>
-                {/* Monospaced, so each character fills one of the cells the
-                    column is measured in and the column fits its IDs. */}
-                <Text color="subtle" mono>
-                  {shortOf(r)}
-                </Text>
+                <Text color="subtle">{shortOf(r)}</Text>
               </Box>
               <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
                 {GLYPH[r.status] ?? '○'}
@@ -834,6 +840,14 @@ export const register: Register = (on, options) => {
                       P{r.priority}
                     </Text>
                   )}
+                </Box>
+              )}
+              {/* A zero-width character makes the slot one line tall, so the
+                  icon centres on the title's first line. */}
+              {Svg && showsTypes && (
+                <Box width={2} flexShrink={0} alignItems="center">
+                  {typeOf(r)}
+                  <Text>{'​'}</Text>
                 </Box>
               )}
               <Box flexGrow={1} flexShrink={1}>
@@ -1014,13 +1028,12 @@ export const register: Register = (on, options) => {
       [...above, ...bead.blockedBy].flatMap(r => (r.id in all ? [] : [r.id])),
     )
 
-    // The breadcrumb: ≡ for the pane's list, then each bead above, then
-    // this one, unlinked.
+    // The breadcrumb: "Beads" for the pane's list, then each bead above, then
+    // this one, unlinked. In the body font, not code: a desktop draws a
+    // link's code as plain text, so code would set only the last ID apart.
     const chain = [...above.map(r => r.id), id]
     const trail = trailLabels(chain)
-      .map((label, i) =>
-        i === chain.length - 1 ? `\`${label}\`` : link(chain[i] ?? '', `\`${label}\``),
-      )
+      .map((label, i) => (i === chain.length - 1 ? label : link(chain[i] ?? '', label)))
       .join(' › ')
     // A wait longer than OPENING_MS names the bead being opened in the
     // breadcrumb, so a slow click still shows. Nothing below it moves.
@@ -1031,14 +1044,16 @@ export const register: Register = (on, options) => {
     }
     const isOpeningShown = waiting !== null && nowMs - waiting.sinceMs >= OPENING_MS
     const crumbs = isOpeningShown
-      ? `${link('~home', '≡')} › \`${wanted}\` · *opening…*`
-      : `${link('~home', '≡')} › ${trail}`
+      ? `${link('~home', 'Beads')} › ${wanted} · *opening…*`
+      : `${link('~home', 'Beads')} › ${trail}`
 
     const status = statusOf(bead.status)
     const refHref = bead.externalRef === '' ? null : refUrl(bead.externalRef, repo)
 
     const isBlocked = bead.blockedBy.some(b => b.status !== 'closed')
-    const typeIcon = typeIconSvg(bead.type)
+    // Centred on the title's line, the icon sat 2px above the text, whose
+    // middle is below its line's, so it is drawn 2px lower.
+    const titleIcon = typeIcon(bead.type, 18, 2)
 
     // Children whose IDs nest under this bead's come first, in ID order, so
     // they set the ID column; a child filed elsewhere comes after them.
@@ -1075,28 +1090,19 @@ export const register: Register = (on, options) => {
             the block needs no heading. */}
         <Box flexDirection="column">
           {isLong && counts.length > 1 ? (
-            <Box gap="sm" flexWrap="wrap">
+            <Box gap="md" flexWrap="wrap">
               {counts.map(([st, n]) => {
                 const label = `${n} ${statusOf(st).label.toLowerCase()}`
+                // A link per status after its coloured glyph: a desktop's
+                // native button has no small size, and outweighed the
+                // title. The one on is bold with a ×, and pressing it again
+                // clears it.
                 const isOn = st === onlyStatus
-                // A chip per status, a Button so a click anywhere on it
-                // counts: the one on drawn as the primary button. The
-                // terminal draws it plain, bracketing the one on.
-                const isTerminal = e.surface === 'terminal'
                 return (
-                  <Button
-                    key={`count-${st}`}
-                    {...(isTerminal ? { plain: true as const } : {})}
-                    {...(isOn ? { variant: 'primary' as const } : {})}
-                    onPress={() => {
-                      press(`${BASE}~only:${st}`).catch(err =>
-                        logFailure($, 'filtering the children', err),
-                      )
-                    }}
-                  >
+                  <Box key={`chip-${st}`} gap="xs" alignItems="center">
                     <Text color={statusOf(st).color}>{GLYPH[st] ?? '○'}</Text>
-                    {isOn && isTerminal ? ` [${label}]` : ` ${label}`}
-                  </Button>
+                    {md(`count-${st}`, link(`~only:${st}`, isOn ? `**${label}** ×` : label))}
+                  </Box>
                 )
               })}
             </Box>
@@ -1127,24 +1133,17 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column" gap="xs">
           {/* The breadcrumb row is always drawn, so the rest of the pane stays
               in place when it moves to another bead. It is the pane's only
-              navigation: ≡ leads to this session's beads, ancestors
+              navigation: "Beads" leads to this session's beads, ancestors
               are links, and the conversation's links reopen anything else. */}
           <Box>{md('trail', crumbs)}</Box>
           {/* The type's icon leads the title, so an epic, a task and a bug
               look different at a glance; the status line names the type. */}
           <Box gap="sm" alignItems="flex-start">
-            {Svg && typeIcon && (
+            {Svg && titleIcon && (
               // A zero-width character in the title's size makes this box one
               // title line tall, so the icon centres on the first line.
               <Box alignItems="center" flexShrink={0}>
-                <Svg
-                  key="type-icon"
-                  alt={bead.type}
-                  width={18}
-                  height={18}
-                  source={typeIcon}
-                  isInteractive
-                />
+                <Svg key="type-icon" alt={bead.type} {...titleIcon} isInteractive />
                 <Text size="heading" weight="semibold">
                   {'\u200b'}
                 </Text>
@@ -1167,9 +1166,9 @@ export const register: Register = (on, options) => {
                 <Text color={priorityColor(bead.priority)}>P{bead.priority}</Text>
               )}
               {/* The type in words only where no icon says it. */}
-              {bead.type !== '' && !(Svg && typeIcon) && <Text color="subtle">{'  ·  '}</Text>}
+              {bead.type !== '' && !(Svg && titleIcon) && <Text color="subtle">{'  ·  '}</Text>}
               {bead.type !== '' &&
-                !(Svg && typeIcon) &&
+                !(Svg && titleIcon) &&
                 bead.type.replace(/^./, c => c.toUpperCase())}
               <Text color="subtle">{'  ·  '}</Text>
               {bead.assignee ? bead.assignee : <Text color="subtle">Unassigned</Text>}

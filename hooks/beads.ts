@@ -91,6 +91,7 @@ const refOf = (r: Row): Ref | null =>
         title: str(r.title),
         status: str(r.status),
         ...(typeof r.priority === 'number' ? { priority: r.priority } : {}),
+        ...(typeof r.issue_type === 'string' && r.issue_type !== '' ? { type: r.issue_type } : {}),
       }
     : null
 const refs = (v: unknown): Ref[] => rows(v).flatMap(r => refOf(r) ?? [])
@@ -484,13 +485,24 @@ const TYPE_ICONS: Record<string, { path: string; colour: string }> = {
 
 // The icon for a type, as an SVG whose title names the type for a tooltip;
 // null for a type bd added after this list.
-export const typeIconSvg = (type: string): string | null => {
+// The type's icon, `size` pixels wide. `lowerPx` moves the glyph down within
+// a box that centres it: the drawing grows by twice that at the top, so its
+// centre falls below the glyph's. `opacity` mutes it.
+export const typeIcon = (
+  type: string,
+  size: number,
+  lowerPx = 0,
+  opacity = 1,
+): { source: string; width: number; height: number } | null => {
   const icon = TYPE_ICONS[type]
-  return icon
-    ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="${icon.colour}" ` +
-        `stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">` +
-        `<title>${type.replace(/^./, c => c.toUpperCase())}</title><path d="${icon.path}"/></svg>`
-    : null
+  if (!icon) return null
+  const extra = (2 * lowerPx * 16) / size
+  const source =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${-extra} 16 ${16 + extra}" fill="none" ` +
+    `stroke="${icon.colour}" stroke-opacity="${opacity}" stroke-width="1.4" ` +
+    `stroke-linecap="round" stroke-linejoin="round">` +
+    `<title>${type.replace(/^./, c => c.toUpperCase())}</title><path d="${icon.path}"/></svg>`
+  return { source, width: size, height: size + 2 * lowerPx }
 }
 
 // A speech bubble with the count in it, as an SVG: a filled rounded box with
