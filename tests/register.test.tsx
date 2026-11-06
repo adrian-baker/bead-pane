@@ -556,13 +556,50 @@ test('moving to a bead not yet looked up keeps the last one until it loads', asy
   await settle(clock)
 
   await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/demo-zz11' } })
-  // Before the lookup runs, the breadcrumb names the bead being opened, and
-  // the rest of the pane still shows the bead it had.
+  // A quick lookup just swaps the bead in: until it's back, the pane shows the
+  // bead it had, with no "opening…" and no "Loading…".
+  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
+    '[☰](https://beads.invalid/~home) › demo-a1b2c',
+  )
+  expect(await pane.find({ type: 'Text', text: /Loading/ })).toBeFalsy()
+  await settle(clock)
+  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
+    '[☰](https://beads.invalid/~home) › demo-zz11',
+  )
+  await pane.unmount()
+  await ui.unmount()
+})
+
+test('a slow lookup names the bead being opened after a moment', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const healthy = fakeBd({
+    beads: {
+      'demo-a1b2c': row('demo-a1b2c', { description: 'See demo-zz11.' }),
+      'demo-zz11': row('demo-zz11'),
+    },
+  })
+  // bd answers about demo-zz11 two seconds late.
+  on('process.run', async (_, e) => {
+    if (e.argv.includes('demo-zz11')) await clock.sleep(2000)
+    return healthy(_, e)
+  })
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+
+  const ui = await $.ui.mount(message('See demo-a1b2c.'))
+  await settle(clock)
+  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  const pane = await $.ui.mount(PANE)
+  await settle(clock)
+  await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/demo-zz11' } })
+  await clock.advance(300)
   expect(textOf(await pane.find({ key: 'trail' }))).toBe(
     '[☰](https://beads.invalid/~home) › demo-zz11 · *opening…*',
   )
-  expect(textOf(await pane.find({ key: 'desc' }))).toContain('demo')
-  expect(await pane.find({ type: 'Text', text: /Loading/ })).toBeFalsy()
+  await clock.advance(2000)
   await settle(clock)
   expect(textOf(await pane.find({ key: 'trail' }))).toBe(
     '[☰](https://beads.invalid/~home) › demo-zz11',

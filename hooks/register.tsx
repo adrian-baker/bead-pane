@@ -271,6 +271,19 @@ let isRefreshPending = false
 let lastDrawMs = 0
 // The last bead the pane drew in full.
 let lastShown: string | null = null
+// The bead the pane is waiting to draw, and since when. A lookup that takes
+// longer than OPENING_MS shows "opening…"; a quicker one just swaps in.
+let waiting: { id: string; sinceMs: number } | null = null
+const OPENING_MS = 300
+
+// Redraws the pane once the wait has run long enough to show "opening…".
+function showOpeningLater($: EngineInterface): void {
+  $.clock.after(OPENING_MS, () => {
+    // A lookup that finished in time leaves nothing to redraw.
+    if (waiting === null) return
+    update($, pulse, n => n + 1).catch(err => logFailure($, 'redrawing the pane', err))
+  })
+}
 let lastPulseMs = 0
 const POLL_MS = 5000
 // Writes within this much of each other share one lookup.
@@ -702,9 +715,15 @@ export const register: Register = (on, options) => {
     const trail = trailLabels(chain)
       .map((label, i) => (i === chain.length - 1 ? label : link(chain[i] ?? '', label)))
       .join(' › ')
-    // While the pane waits for the bead it moved to, the breadcrumb already
-    // names it, so the click shows at once and nothing below moves.
-    const crumbs = isWaiting
+    // A wait longer than OPENING_MS names the bead being opened in the
+    // breadcrumb, so a slow click still shows. Nothing below it moves.
+    if (!isWaiting) waiting = null
+    else if (waiting?.id !== wanted) {
+      waiting = { id: wanted, sinceMs: nowMs }
+      showOpeningLater($)
+    }
+    const isOpeningShown = waiting !== null && nowMs - waiting.sinceMs >= OPENING_MS
+    const crumbs = isOpeningShown
       ? `${link('~home', '☰')} › ${wanted} · *opening…*`
       : `${link('~home', '☰')} › ${trail}`
 
