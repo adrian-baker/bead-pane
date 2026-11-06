@@ -1069,17 +1069,11 @@ export const register: Register = (on, options) => {
     const counts = countByStatus(kids)
     const children = kids.length > 0 && (
       <Box key="children" flexDirection="column" gap="xs">
-        {/* The progress bar, then each status's count: chips that filter on a
-            long list, `5/7` on a short one. The `.n` IDs below say these are
-            the children, so the row needs no heading. */}
-        <Box gap="sm" alignItems="center" flexWrap="wrap">
-          <Text size="caption">
-            {runs.map(([st, n]) => (
-              <Text key={`bar-${st}`} color={statusOf(st).color} dimColor={st === 'closed'}>
-                {'━'.repeat(n)}
-              </Text>
-            ))}
-          </Text>
+        {/* Each status's count, left-aligned: chips that filter on a long
+            list, `5/7` on a short one; then the progress bar as a thin line
+            under them. The `.n` IDs below say these are the children, so
+            the block needs no heading. */}
+        <Box flexDirection="column">
           {isLong && counts.length > 1 ? (
             <Box gap="sm" flexWrap="wrap">
               {counts.map(([st, n]) => {
@@ -1111,6 +1105,13 @@ export const register: Register = (on, options) => {
               {kids.filter(k => k.status === 'closed').length}/{kids.length}
             </Text>
           )}
+          <Text size="caption">
+            {runs.map(([st, n]) => (
+              <Text key={`bar-${st}`} color={statusOf(st).color} dimColor={st === 'closed'}>
+                {'━'.repeat(n)}
+              </Text>
+            ))}
+          </Text>
         </Box>
         {list('kids', shown, id)}
         {isLong &&
