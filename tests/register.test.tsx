@@ -519,8 +519,7 @@ test("the pane shows a bead's labels, external ref, spec and comments", async ($
   expect(await pane.find({ type: 'Text', text: 'specs/importer.md' })).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: 'COMMENTS' })).toBeTruthy()
   // The count is drawn in a speech bubble.
-  const counted = await pane.find({ key: 'count-bubble' })
-  expect(counted?.type).toBe('Svg')
+  const counted = await pane.find({ type: 'Svg' })
   expect((counted?.props as { alt?: string } | undefined)?.alt).toBe('2')
   // Oldest first, IDs linked.
   expect(textOf(await pane.find({ key: 'comment-0-text' }))).toBe('Seen again today.')
