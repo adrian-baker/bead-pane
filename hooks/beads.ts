@@ -17,6 +17,18 @@ export const idPattern = (prefix: string): RegExp => {
   return made
 }
 
+// `bd info --json`: the folder that holds the project's Dolt data.
+export const parseDatabasePath = (stdout: string): string | null => {
+  const info = json(stdout)
+  return isRow(info) && typeof info.database_path === 'string' && info.database_path !== ''
+    ? info.database_path
+    : null
+}
+
+// Dolt appends every write to a database to this file, its chunk journal, in
+// `<database>/.dolt/noms/`. The name is a constant of Dolt's storage format.
+export const JOURNAL = 'v'.repeat(32)
+
 // bd allows letters, digits, `_` and `-` in a prefix.
 export const parsePrefix = (stdout: string): string | null => {
   const prefix = stdout.trim()

@@ -9,8 +9,10 @@ import {
   idsIn,
   linkIds,
   countByStatus,
+  JOURNAL,
   parseAssigned,
   parseChildren,
+  parseDatabasePath,
   parsePrefix,
   parseShown,
   summarised,
@@ -55,6 +57,8 @@ const touched = atom(
     shape: 'touched-2',
   },
 )
+
+const pulse = atom({ plugin: 'bead-pane', key: 'pulse' } as const, 0, { shape: 'pulse-1' })
 
 // One glyph per status, from empty to full as work moves on, drawn in the
 // status colour. The header and every list use the same glyph. Closed's green
@@ -228,6 +232,97 @@ async function addTitled($: EngineInterface, bd: string, title: string): Promise
   }))
 }
 
+// Keeping the pane current with writes made outside this session. Where the
+// project's Dolt data is on this machine, `tail -F` on its journal reports
+// each write as it lands, and costs nothing between writes. Elsewhere, such
+// as a Dolt server on another machine, the mod asks bd every 5 seconds while
+// the pane is open.
+let isWatching = false
+// Set once there's no journal to follow; `isPolling` while a poll is due.
+let isPollMode = false
+let isPolling = false
+let isRefreshPending = false
+// When the pane last drew, and when the mod last bumped `pulse`. The pane
+// reads `pulse`, so an open pane draws after each bump. A pane that hasn't
+// drawn since the last bump is closed, and a refresh then skips its lookup.
+let lastDrawMs = 0
+let lastPulseMs = 0
+const POLL_MS = 5000
+// Writes within this much of each other share one lookup.
+const SETTLE_MS = 500
+
+function watchChanges($: EngineInterface, bd: string): void {
+  if (isWatching) return
+  isWatching = true
+  $.clock.after(0, () => {
+    follow($, bd).catch(err => logFailure($, 'watching for bead changes', err))
+  })
+}
+
+// The journals of the databases in the project's Dolt folder. A server's
+// folder holds one database per subfolder; an embedded one is the database.
+async function journalsOf($: EngineInterface, bd: string): Promise<string[]> {
+  const ran = await runBd($, bd, ['info', '--json'])
+  const root =
+    ran.kind === 'ran' && ran.result.exitCode === 0 ? parseDatabasePath(ran.result.stdout) : null
+  if (!root || !(await $.fs.exists(root))) return []
+  const dirs = (await $.fs.list(root)).filter(
+    entry => entry.kind === 'dir' && !entry.name.startsWith('.'),
+  )
+  const found: string[] = []
+  for (const dir of dirs) {
+    const path = `${root}/${dir.name}/.dolt/noms/${JOURNAL}`
+    if (await $.fs.exists(path)) found.push(path)
+  }
+  const own = `${root}/.dolt/noms/${JOURNAL}`
+  return found.length > 0 ? found : (await $.fs.exists(own)) ? [own] : []
+}
+
+// Follows the journals until the module unloads, which stops `tail`. Polls
+// when there's no journal, or when `tail` stops on its own.
+async function follow($: EngineInterface, bd: string): Promise<void> {
+  const journals = await journalsOf($, bd)
+  if (journals.length > 0) {
+    for await (const piece of $.process.spawn({ argv: ['tail', '-c', '0', '-F', ...journals] })) {
+      if (piece.stream === 'stdout') onChange($, bd)
+    }
+  }
+  isPollMode = true
+  isPolling = true
+  poll($, bd)
+}
+
+function onChange($: EngineInterface, bd: string): void {
+  if (isRefreshPending) return
+  isRefreshPending = true
+  $.clock.after(SETTLE_MS, () => {
+    isRefreshPending = false
+    refreshShown($, bd).catch(err => logFailure($, 'refreshing the pane', err))
+  })
+}
+
+function poll($: EngineInterface, bd: string): void {
+  $.clock.after(POLL_MS, () => {
+    if (lastDrawMs < lastPulseMs) {
+      // Closed: the pane's next draw starts polling again.
+      isPolling = false
+      return
+    }
+    refreshShown($, bd)
+      .catch(err => logFailure($, 'refreshing the pane', err))
+      .finally(() => poll($, bd))
+  })
+}
+
+// Looks up again what the pane shows: its bead, or the session's list.
+async function refreshShown($: EngineInterface, bd: string): Promise<void> {
+  if (lastDrawMs < lastPulseMs) return
+  const id = await read($, selected)
+  refresh($, bd, id === null ? Object.keys(await read($, touched)) : [id])
+  lastPulseMs = await $.clock.now()
+  await update($, pulse, n => n + 1)
+}
+
 // Opens the pane on one bead, or on the session's list for null.
 async function openPane($: EngineInterface, id: string | null): Promise<void> {
   await update($, selected, () => id)
@@ -373,6 +468,13 @@ export const register: Register = (on, options) => {
     const all = await read($, beads)
 
     const nowMs = await $.clock.now()
+    await read($, pulse)
+    lastDrawMs = nowMs
+    watchChanges($, bd)
+    if (isPollMode && !isPolling) {
+      isPolling = true
+      poll($, bd)
+    }
     const isExpanded = (await read($, expanded)) === id
     // Every link in the pane is Markdown, so one handler serves them all.
     const press = async (href: string) => {

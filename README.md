@@ -25,8 +25,17 @@ first, with what it last did to each. The mod adds a bead when:
 The mod reads beads with `bd show --json` and `bd children --json` and doesn't change them. It
 looks beads up after a message has drawn, all the IDs a draw needs in one `bd show`, and keeps
 the answers for the session. Neither the reply nor the model waits on `bd`, and the lookups use
-no tokens. A `bd` command in the session that changes a bead looks it up again, and so does
-opening it in the pane.
+no tokens.
+
+The pane keeps up with changes made anywhere, such as another session or a person:
+
+- A `bd` command in this session that changes a bead looks it up again at once.
+- Where the project's Dolt data is on this machine, the mod follows Dolt's journal file with
+  `tail -F`. Each write elsewhere refreshes what the pane shows within about a second, and
+  nothing runs between writes.
+- Otherwise, such as with a Dolt server on another machine, it asks `bd` every 5 seconds while
+  the pane is open.
+- A closed pane doesn't refresh.
 
 The mod asks `bd config get issue_prefix` for the project's prefix, so it links only that
 project's IDs. If `bd` can't run, or finds no database from the session's folder, the pane says

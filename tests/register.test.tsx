@@ -338,3 +338,91 @@ test("a bead the session's title names is in the pane's list", async ($, on) => 
   expect(await pane.find({ type: 'Text', text: /^in title$/ })).toBeTruthy()
   await pane.unmount()
 })
+
+const DOLT = '/beads/.dolt-data'
+const JOURNAL_PATH = `${DOLT}/demo/.dolt/noms/${'v'.repeat(32)}`
+
+// The kit waits about a second on each act while the stand-in for tail is
+// running, so this test needs longer than the default 5 seconds.
+test(
+  "a write to the project's Dolt journal refreshes the bead in the pane",
+  { timeoutMs: 30_000 },
+  async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const beads: Record<string, Record<string, unknown>> = {
+      'demo-a1b2c': row('demo-a1b2c', { title: 'Tidy the importer' }),
+    }
+    const ran: (readonly string[])[] = []
+    on('process.run', fakeBd({ beads, ran, databasePath: DOLT }))
+    on('fs.exists', (_, e) => ({ value: e.path === DOLT || e.path === JOURNAL_PATH }))
+    on('fs.list', () => ({
+      value: [{ name: 'demo', kind: 'dir' as const, size: 0, mtimeMs: NOW, isLink: false }],
+    }))
+    let tailed: readonly string[] = []
+    // `tail -F` reports one write a second after it starts, then exits.
+    on('process.spawn', async function* (_, e) {
+      tailed = e.argv
+      await clock.sleep(1000)
+      yield { stream: 'stdout' as const, text: 'chunk' }
+      return { value: { code: 0, signal: null } }
+    })
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+      const { Markdown } = $.ui.resolve(e)
+      return <Markdown text={e.props.text} />
+    })
+
+    const ui = await $.ui.mount(message('See demo-a1b2c.'))
+    await settle(clock)
+    await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+    const pane = await $.ui.mount(PANE)
+    await settle(clock)
+    expect(tailed).toEqual(['tail', '-c', '0', '-F', JOURNAL_PATH])
+    expect(await pane.find({ type: 'Text', text: /Open/ })).toBeTruthy()
+
+    // Another session closes it, and the journal reports the write.
+    beads['demo-a1b2c'] = row('demo-a1b2c', { title: 'Tidy the importer', status: 'closed' })
+    await clock.advance(1000)
+    await clock.advance(500)
+    await settle(clock)
+    expect(await pane.find({ type: 'Text', text: /Closed/ })).toBeTruthy()
+    // The refresh asked about the pane's bead alone, without a poll.
+    expect(ran.slice(-1)).toEqual([['bd', 'show', 'demo-a1b2c', '--json']])
+    await pane.unmount()
+    await ui.unmount()
+  },
+)
+
+test('without a journal the pane polls while open, and stops once closed', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const beads: Record<string, Record<string, unknown>> = { 'demo-a1b2c': row('demo-a1b2c') }
+  const ran: (readonly string[])[] = []
+  on('process.run', fakeBd({ beads, ran }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+
+  const ui = await $.ui.mount(message('See demo-a1b2c.'))
+  await settle(clock)
+  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  const pane = await $.ui.mount(PANE)
+  await settle(clock)
+
+  beads['demo-a1b2c'] = row('demo-a1b2c', { status: 'in_progress' })
+  await clock.advance(5000)
+  await settle(clock)
+  expect(await pane.find({ type: 'Text', text: /In progress/ })).toBeTruthy()
+
+  await pane.unmount()
+  await ui.unmount()
+  const shows = () => ran.filter(argv => argv[1] === 'show').length
+  // One more poll finds the pane closed; after that, none.
+  await clock.advance(10_000)
+  await settle(clock)
+  const after = shows()
+  await clock.advance(60_000)
+  await settle(clock)
+  expect(shows()).toBe(after)
+})

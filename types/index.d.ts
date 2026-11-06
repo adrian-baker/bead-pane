@@ -56,6 +56,9 @@ declare module 'claude-code' {
       selected: Shaped<string | null>
       expanded: Shaped<string | null>
       touched: Shaped<Record<string, { how: How; atMs: number }>>
+      // Counts the mod's refreshes. The pane reads it, so a refresh redraws an
+      // open pane even when nothing changed, and a closed pane doesn't draw.
+      pulse: Shaped<number>
     }
   }
 }

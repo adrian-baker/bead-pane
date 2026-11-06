@@ -49,18 +49,25 @@ export type FakeBd = {
   beads?: Record<string, Record<string, unknown>>
   children?: Record<string, Record<string, unknown>[]>
   assigned?: Record<string, unknown>[]
+  // The Dolt folder `bd info` reports; none when absent.
+  databasePath?: string
   // Every argument vector the mod ran, in order.
   ran?: (readonly string[])[]
 }
 
 export const fakeBd =
-  ({ prefix = 'demo', beads = {}, children = {}, assigned = [], ran = [] }: FakeBd) =>
+  ({ prefix = 'demo', beads = {}, children = {}, assigned = [], databasePath, ran = [] }: FakeBd) =>
   (_: unknown, e: { argv: readonly string[] }): Answer => {
     ran.push(e.argv)
     const [, verb = '', ...rest] = e.argv
     if (verb === 'config') return answer(0, `${prefix}\n`)
     if (verb === 'children') return answer(0, children[rest[0] ?? ''] ?? [])
     if (verb === 'list') return answer(0, assigned)
+    if (verb === 'info') {
+      return databasePath
+        ? answer(0, { database_path: databasePath, mode: 'direct' })
+        : answer(1, '', 'no database')
+    }
     const found = rest.flatMap(id => beads[id] ?? [])
     return found.length > 0
       ? answer(0, found)
