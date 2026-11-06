@@ -365,6 +365,8 @@ export const relinkFiles = (
     }),
   )
 
+const GITHUB_URL = /https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/(pull|issues)\/(\d+)[^\s)\]]*/g
+
 // Links `PR 4503` to the pull request and `#4501` or `gh-4501` to the issue,
 // outside code and outside links already written. GitHub sends an issue's
 // address on to a pull request with that number.
@@ -372,13 +374,30 @@ export const linkGitHub = (text: string, repo: string): string =>
   outsideCode(text, prose => {
     let out = ''
     let at = 0
-    const plain = (part: string) =>
+    const shorthand = (part: string) =>
       part
         .replace(/\bPR ?#?(\d{1,6})\b/g, (m, n) => `[${m}](https://github.com/${repo}/pull/${n})`)
         .replace(
           /(?<![\w/&#[])(?:#|\bgh-)(\d{1,6})\b/g,
           (m, n) => `[${m}](https://github.com/${repo}/issues/${n})`,
         )
+    // A bare pull request or issue URL reads as its shorthand, `PR 2769` or
+    // `#2769`, with the repository's name when it's another's. A full stop or
+    // comma after it stays outside the link.
+    const plain = (part: string) => {
+      let text = ''
+      let from = 0
+      for (const m of part.matchAll(GITHUB_URL)) {
+        const [whole, owner = '', kind, n] = m
+        const url = whole.replace(/[.,;:!?]+$/, '')
+        const before = part.slice(from, m.index)
+        // After the words "PR", as in "Draft PR <url>", the number alone.
+        const label = kind === 'pull' && !/\bPR\s*$/.test(before) ? `PR ${n}` : `#${n}`
+        text += shorthand(before) + `[${owner === repo ? label : `${owner}#${n}`}](${url})`
+        from = m.index + url.length
+      }
+      return text + shorthand(part.slice(from))
+    }
     for (const m of prose.matchAll(LINK)) {
       out += plain(prose.slice(at, m.index)) + m[0]
       at = m.index + m[0].length

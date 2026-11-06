@@ -150,6 +150,21 @@ test('PR and issue numbers link to the repository, outside code and links', () =
   )
 })
 
+test('a bare pull request or issue URL reads as its shorthand', () => {
+  expect(
+    linkGitHub(
+      'Draft PR https://github.com/acme/widgets/pull/2769, see ' +
+        'https://github.com/acme/widgets/issues/12#issuecomment-1. Also ' +
+        'https://github.com/other/thing/pull/5/files and [x](https://github.com/acme/widgets/pull/9).',
+      'acme/widgets',
+    ),
+  ).toBe(
+    'Draft PR [#2769](https://github.com/acme/widgets/pull/2769), see ' +
+      '[#12](https://github.com/acme/widgets/issues/12#issuecomment-1). Also ' +
+      '[other/thing#5](https://github.com/other/thing/pull/5/files) and [x](https://github.com/acme/widgets/pull/9).',
+  )
+})
+
 test('an external ref reads as a PR or an issue and links where it can', () => {
   expect(refLabel('https://github.com/acme/widgets/pull/4610')).toBe('PR 4610')
   expect(refLabel('gh-2510')).toBe('#2510')

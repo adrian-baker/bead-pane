@@ -1058,7 +1058,9 @@ export const register: Register = (on, options) => {
           { to: '', label: id },
         ]
     const crumbs = (
-      <Box key="trail" gap="xs" alignItems="center" flexWrap="wrap">
+      // Links and grey text in one row, top-aligned: both are a body line
+      // tall, so their text lines up, where centring aligns their boxes.
+      <Box key="trail" gap="xs" alignItems="flex-start" flexWrap="wrap">
         {md('crumb-home', link('~home', '☰'))}
         {steps.flatMap(step => [
           <Text key={`sep-${step.label}`} color="subtle">
