@@ -176,7 +176,18 @@ let projectKey: string | null = null
 let remembered = new Set<string>()
 const REMEMBERED_MAX = 2000
 type Remembered = { setup: Setup | null; ids: string[] }
-const storeKey = (folder: string) => `project:${folder}`
+// Keyed by the repository's folder: a worktree Claude Code made sits under
+// `<repo>/.claude/worktrees/<name>` and shares the repository's beads.
+export const projectOf = (folder: string) => folder.replace(/\/\.claude\/worktrees\/[^/]+\/?$/, '')
+const storeKey = (folder: string) => `project:${projectOf(folder)}`
+
+// Read once per load, by whichever comes first: the session's start or a
+// message's draw, which can come before it.
+let recalling: Promise<void> | null = null
+const recallOnce = ($: EngineInterface): Promise<void> => {
+  recalling ??= recall($).catch(err => logFailure($, 'recalling the project', err))
+  return recalling
+}
 
 async function recall($: EngineInterface): Promise<void> {
   const folder = await $.session.cwd()
@@ -185,13 +196,17 @@ async function recall($: EngineInterface): Promise<void> {
   if (Array.isArray(stored?.ids)) {
     remembered = new Set(stored.ids.filter((id): id is string => typeof id === 'string'))
   }
-  // The beads this session already found, as after a reload, which looks
-  // none up again; saved after the draw.
+  // What this load learned before the folder was known, such as the setup a
+  // draw asked for first, or the beads a reloaded session found and won't
+  // look up again: saved after the draw.
   $.clock.after(0, async () => {
     const known = await read($, beads)
     const found = Object.keys(known).filter(id => known[id]?.kind === 'found')
-    if (found.length > 0) {
-      await remember($, { found }).catch(err => logFailure($, 'remembering beads', err))
+    const now = await read($, setup)
+    if (found.length > 0 || now?.kind === 'ready') {
+      await remember($, { found, ...(now?.kind === 'ready' ? { setup: now } : {}) }).catch(err =>
+        logFailure($, 'remembering beads', err),
+      )
     }
   })
   const was = stored?.setup
@@ -554,7 +569,7 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     // At every start and reload, before the transcript draws.
-    await recall($).catch(err => logFailure($, 'recalling the project', err))
+    await recallOnce($)
     // bd is asked again after the draw, in case the setup changed.
     ensureSetup($, bd)
     await $.command.register({
@@ -618,6 +633,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     // The terminal marks a summary row only when it draws the row itself.
     if (e.props.isSummary) return next(e)
+    await recallOnce($)
     const found = await read($, setup)
     if (found?.kind !== 'ready') {
       ensureSetup($, bd)
