@@ -810,10 +810,9 @@ export const register: Register = (on, options) => {
       const showsTypes = new Set(refs.flatMap(r => (r.type ? [r.type] : []))).size > 1
       const typeOf = (r: Ref) => {
         const icon = Svg && r.type ? typeIcon(r.type, 12, 0, 0.7) : null
-        return (
-          Svg &&
-          icon && <Svg key={`${rowKey}-${r.id}-type`} alt={r.type ?? ''} {...icon} isInteractive />
-        )
+        // An image, not an interactive frame: a frame loads after its row, so
+        // rows a filter brings back would draw their icons a beat late.
+        return Svg && icon && <Svg key={`${rowKey}-${r.id}-type`} alt={r.type ?? ''} {...icon} />
       }
       return (
         <Box key={key} flexDirection="column" gap={spaced && !isBranch ? 'xs' : undefined}>
@@ -1044,7 +1043,7 @@ export const register: Register = (on, options) => {
       [...above, ...bead.blockedBy].flatMap(r => (r.id in all ? [] : [r.id])),
     )
 
-    // The breadcrumb: ☰ for the pane's list, then each bead above, then
+    // The breadcrumb: ▤ for the pane's list, then each bead above, then
     // this one. As in the lists, a bead's link is its title and its ID is
     // grey: each ancestor by its title, shortened, and this bead by its ID.
     const shortTitle = (title: string) =>
@@ -1067,7 +1066,7 @@ export const register: Register = (on, options) => {
       // Links and grey text in one row, top-aligned: both are a body line
       // tall, so their text lines up, where centring aligns their boxes.
       <Box key="trail" gap="xs" alignItems="flex-start" flexWrap="wrap">
-        {md('crumb-home', link('~home', '☰'))}
+        {md('crumb-home', link('~home', '▤'))}
         {steps.flatMap(step => [
           <Text key={`sep-${step.label}`} color="subtle">
             ›
@@ -1191,7 +1190,7 @@ export const register: Register = (on, options) => {
           <Box flexDirection="column" gap="xs">
             {/* The breadcrumb row is always drawn, so the rest of the pane stays
               in place when it moves to another bead. It is the pane's only
-              navigation: ☰ leads to this session's beads, ancestors
+              navigation: ▤ leads to this session's beads, ancestors
               are links, and the conversation's links reopen anything else. */}
             {crumbs}
             {/* The type's icon leads the title, so an epic, a task and a bug
