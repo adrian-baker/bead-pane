@@ -447,10 +447,29 @@ const ICON_PATHS = {
 } as const
 export type IconName = keyof typeof ICON_PATHS
 
-export const iconSvg = (name: IconName): string =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="#8b8b8b" ` +
-  `stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">` +
-  `<path d="${ICON_PATHS[name]}"/></svg>`
+// Each icon's leftmost x, in its 16 units.
+const ICON_LEFT: Record<IconName, number> = {
+  notes: 3.5,
+  design: 3,
+  acceptance: 2.5,
+  spec: 4,
+  resolution: 2.5,
+}
+
+// A section's icon, `size` pixels to its 16 units, starting at the glyph's
+// left edge so it lines up with the text under the heading.
+export const iconSvg = (
+  name: IconName,
+  size: number,
+): { source: string; width: number; height: number } => {
+  // Half the stroke's width beyond the path.
+  const x0 = ICON_LEFT[name] - 0.7
+  const source =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} 0 ${16 - x0} 16" fill="none" stroke="#8b8b8b" ` +
+    `stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">` +
+    `<path d="${ICON_PATHS[name]}"/></svg>`
+  return { source, width: (size * (16 - x0)) / 16, height: size }
+}
 
 // The rows grouped under their parents, in the order each group first
 // appears. Rows with no parent next to each other share a group without one,
@@ -475,45 +494,57 @@ export const underParents = (
 // An icon for each of bd's issue types, drawn beside a bead's title in the
 // type's colour: fixed colours, since an SVG draws as an image without the
 // theme, each one that reads on a light or a dark pane.
-const TYPE_ICONS: Record<string, { path: string; colour: string }> = {
-  epic: { path: 'M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z', colour: '#a371f7' },
-  task: { path: 'M3 3h10v10H3zM5.5 8.2l1.8 1.8 3.4-3.8', colour: '#6f9cef' },
+// `left` is the path's leftmost x, in its 16 units.
+const TYPE_ICONS: Record<string, { path: string; colour: string; left: number }> = {
+  epic: { path: 'M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z', colour: '#a371f7', left: 3.5 },
+  task: { path: 'M3 3h10v10H3zM5.5 8.2l1.8 1.8 3.4-3.8', colour: '#6f9cef', left: 3 },
   bug: {
     path: 'M5.5 6h5v4.5a2.5 2.5 0 0 1-5 0zM8 6v7M5.5 8.5H3M10.5 8.5H13M5.5 11H3.5M10.5 11h2M6 6L5 3.5M10 6l1-2.5',
     colour: '#e07070',
+    left: 3,
   },
   feature: {
     path: 'M8 2l1.8 3.8 4.2.5-3.1 2.8.9 4.1L8 11.1 4.2 13.2l.9-4.1L2 6.3l4.2-.5z',
     colour: '#5e9b4f',
+    left: 2,
   },
-  decision: { path: 'M8 14V2M8 3h4.5L14 4.5 12.5 6H8M8 7.5H3.5L2 9l1.5 1.5H8', colour: '#d29b3a' },
-  spike: { path: 'M6 2h4M6.5 2v4L3 13h10L9.5 6V2', colour: '#3fb5b5' },
+  decision: {
+    path: 'M8 14V2M8 3h4.5L14 4.5 12.5 6H8M8 7.5H3.5L2 9l1.5 1.5H8',
+    colour: '#d29b3a',
+    left: 2,
+  },
+  spike: { path: 'M6 2h4M6.5 2v4L3 13h10L9.5 6V2', colour: '#3fb5b5', left: 3 },
   chore: {
     path: 'M10.5 2.5a3 3 0 0 0-3 4L3 11l2 2 4.5-4.5a3 3 0 0 0 4-3l-1.8 1.8-1.7-1.7 1.8-1.8a3 3 0 0 0-1.3-.3z',
     colour: '#8b8b8b',
+    left: 3,
   },
 }
 
-// The icon for a type, as an SVG whose title names the type for a tooltip;
-// null for a type bd added after this list.
-// The type's icon, `size` pixels wide. `lowerPx` moves the glyph down within
-// a box that centres it: the drawing grows by twice that at the top, so its
-// centre falls below the glyph's. `opacity` mutes it.
+// The type's icon, an SVG `size` pixels to its 16 units whose title names the
+// type for a tooltip; null for a type bd added after this list. `lowerPx`
+// moves the glyph down within a box that centres it: the drawing grows by
+// twice that at the top, so its centre falls below the glyph's. `opacity`
+// mutes it. `isFlush` starts the drawing at the glyph's left edge, so it lines
+// up with the text beside it.
 export const typeIcon = (
   type: string,
   size: number,
   lowerPx = 0,
   opacity = 1,
+  isFlush = false,
 ): { source: string; width: number; height: number } | null => {
   const icon = TYPE_ICONS[type]
   if (!icon) return null
   const extra = (2 * lowerPx * 16) / size
+  // Half the stroke's width beyond the path.
+  const x0 = isFlush ? icon.left - 0.7 : 0
   const source =
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${-extra} 16 ${16 + extra}" fill="none" ` +
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x0} ${-extra} ${16 - x0} ${16 + extra}" fill="none" ` +
     `stroke="${icon.colour}" stroke-opacity="${opacity}" stroke-width="1.4" ` +
     `stroke-linecap="round" stroke-linejoin="round">` +
     `<title>${type.replace(/^./, c => c.toUpperCase())}</title><path d="${icon.path}"/></svg>`
-  return { source, width: size, height: size + 2 * lowerPx }
+  return { source, width: (size * (16 - x0)) / 16, height: size + 2 * lowerPx }
 }
 
 // A speech bubble with the count in it, as an SVG: a filled rounded box with

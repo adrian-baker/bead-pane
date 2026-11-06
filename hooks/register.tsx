@@ -75,6 +75,11 @@ const ARM_SVG =
   `preserveAspectRatio="none" fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5">` +
   `<path d="M0 ${BRANCH_HEIGHT / 2}H${ARM_WIDTH}" vector-effect="non-scaling-stroke"/></svg>`
 
+// The breadcrumb's separator, in the grey of the theme's subtle text.
+const CHEVRON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 7 11" fill="none" stroke="#8b8b8b" ' +
+  'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5L5.5 5.5L1.5 9.5"/></svg>'
+
 const EXTRA_ICONS: Record<string, IconName> = {
   Notes: 'notes',
   Design: 'design',
@@ -761,7 +766,7 @@ export const register: Register = (on, options) => {
         <Box gap="xs" alignItems="center">
           {icon && Svg && (
             // Every Svg has an `alt`: a desktop draws none of one without.
-            <Svg key={`${key}-icon`} alt={heading} width={13} height={13} source={iconSvg(icon)} />
+            <Svg key={`${key}-icon`} alt={heading} {...iconSvg(icon, 13)} />
           )}
           <Text size="caption" weight="semibold" color={color}>
             {heading.toUpperCase()}
@@ -1131,9 +1136,18 @@ export const register: Register = (on, options) => {
       <Box key="trail" gap="xs" alignItems="flex-start" flexWrap="wrap">
         {md('crumb-home', link('~home', '▤'))}
         {steps.flatMap(step => [
-          <Text key={`sep-${step.label}`} color="subtle">
-            ›
-          </Text>,
+          // A drawn chevron, centred on the line as the type icons are: the
+          // › glyph is small and sits at the lower case's height.
+          Svg ? (
+            <Box key={`sep-${step.label}`} alignItems="center" marginX="xs">
+              <Svg alt="›" width={7} height={11} source={CHEVRON_SVG} />
+              <Text>{'\u200b'}</Text>
+            </Box>
+          ) : (
+            <Text key={`sep-${step.label}`} color="subtle">
+              ›
+            </Text>
+          ),
           step.to === '' ? (
             <Text key={`crumb-${step.label}`} color="subtle">
               {step.label}
@@ -1151,7 +1165,7 @@ export const register: Register = (on, options) => {
     const isBlocked = bead.blockedBy.some(b => b.status !== 'closed')
     // Centred on the title's line, the icon centres on the capitals, a
     // little taller than they are.
-    const titleIcon = typeIcon(bead.type, 16)
+    const titleIcon = typeIcon(bead.type, 16, 0, 1, true)
 
     // Children whose IDs nest under this bead's come first, in ID order, so
     // they set the ID column; a child filed elsewhere comes after them.

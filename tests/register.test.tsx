@@ -39,17 +39,26 @@ const textOf = (el: { props?: unknown } | undefined): unknown =>
   (el?.props as { text?: unknown } | undefined)?.text
 
 // The breadcrumb as one line: each link's markdown and each grey part's text.
-type Drawn = { type?: string; props?: { text?: unknown }; children?: unknown }
+// A separator drawn as an SVG reads as its alt; a zero-width spacer as nothing.
+type Drawn = { type?: string; props?: { text?: unknown; alt?: unknown }; children?: unknown }
 const flat = (n: unknown): string[] => {
   if (typeof n === 'string') return [n]
   if (Array.isArray(n)) return n.flatMap(flat)
   const d = n as Drawn
   if (d?.type === 'Markdown') return [String(d.props?.text)]
-  if (d?.type === 'Text') return [flat(d.children).join('')]
+  if (d?.type === 'Svg') return [String(d.props?.alt)]
+  if (d?.type === 'Text')
+    return [
+      flat(d.children)
+        .join('')
+        .replace(/\u200b/g, ''),
+    ]
   return flat(d?.children ?? [])
 }
 const trailOf = async (pane: { find: (q: { key: string }) => Promise<unknown> }) =>
-  flat((await pane.find({ key: 'trail' })) as Drawn).join(' ')
+  flat((await pane.find({ key: 'trail' })) as Drawn)
+    .filter(part => part !== '')
+    .join(' ')
 
 const keysOf = (children: unknown): unknown[] =>
   Array.isArray(children)
