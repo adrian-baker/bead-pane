@@ -7,7 +7,6 @@ import {
   ago,
   barRuns,
   changedBy,
-  countBubble,
   datedEntries,
   fileLinks,
   iconSvg,
@@ -566,6 +565,10 @@ export const register: Register = (on, options) => {
     typeof options.bd_path === 'string' && options.bd_path.trim() !== ''
       ? options.bd_path.trim()
       : 'bd'
+  // Links under a reply, or in it: the desktop draws a mod's Markdown at a
+  // different size from its own replies, so a reply the mod draws itself to
+  // link its IDs reads smaller (anthropics/claude-code#107850).
+  const isInline = options.reply_links === 'inline'
 
   on('session.start', async ($, e, next) => {
     // At every start and reload, before the transcript draws.
@@ -657,12 +660,8 @@ export const register: Register = (on, options) => {
     if (links.length === 0) return next(e)
     markMentioned($, links)
 
-    const { Markdown } = $.ui.resolve(e)
-    const text = linkIds(e.props.text, found.prefix, id =>
-      isBead(id) ? `[${id}](${BASE}${id})` : null,
-    )
-
-    return (
+    const { Box, Markdown } = $.ui.resolve(e)
+    const linksMd = (text: string) => (
       <Markdown
         key={`msg-${e.requestId}`}
         text={text}
@@ -673,6 +672,19 @@ export const register: Register = (on, options) => {
           )
         }}
       />
+    )
+    if (isInline) {
+      return linksMd(
+        linkIds(e.props.text, found.prefix, id => (isBead(id) ? `[${id}](${BASE}${id})` : null)),
+      )
+    }
+    // The reply as Claude Code draws it, and under it a row of the beads it
+    // names, in the order it names them.
+    return (
+      <Box flexDirection="column" gap="xs">
+        {await next(e)}
+        {linksMd(links.map(id => `[${id}](${BASE}${id})`).join(' · '))}
+      </Box>
     )
   })
 
@@ -860,28 +872,6 @@ export const register: Register = (on, options) => {
         {body}
       </Box>
     )
-    // A speech bubble's outline, in about the grey of the heading beside it:
-    // an SVG draws as an image, so it can't take the theme's colour.
-    // The count in a speech bubble beside a heading, where the surface draws
-    // SVG; the terminal gets the count as text.
-    const bubble = (n: number) => {
-      if (!Svg)
-        return (
-          <Text size="caption" color="subtle">
-            {n}
-          </Text>
-        )
-      const drawn = countBubble(n)
-      return (
-        <Svg
-          key="count-bubble"
-          alt={`${n}`}
-          width={drawn.width}
-          height={drawn.height}
-          source={drawn.source}
-        />
-      )
-    }
     // A list of beads, one row each: the ID in a grey column, the status glyph,
     // and the title as the link. A closed bead's title isn't dimmed, because
     // dim link blue on a dark background is hard to read. Children show only
@@ -1494,7 +1484,10 @@ export const register: Register = (on, options) => {
               ))}
             </Box>,
             'subtle',
-            bubble(bead.comments.length),
+            <Text size="caption" color="subtle">
+              {bead.comments.length}
+            </Text>,
+            'comments',
           )}
         {!isEpic && children}
       </Box>

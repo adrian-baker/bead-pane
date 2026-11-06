@@ -1,8 +1,11 @@
 {
   "name": "bead-pane",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "description": "Click a beads issue ID in Claude's replies to open the bead in a side pane: status, children, blockers, notes",
-  "author": { "name": "Adrian Baker", "url": "https://github.com/adrian-baker" },
+  "author": {
+    "name": "Adrian Baker",
+    "url": "https://github.com/adrian-baker"
+  },
   "homepage": "https://github.com/adrian-baker/bead-pane",
   "license": "MIT",
   "types": "./types/index.d.ts",
@@ -12,6 +15,13 @@
       "title": "bd command",
       "description": "The bd executable: a name on the PATH Claude Code starts with, or a full path such as /opt/homebrew/bin/bd",
       "default": "bd"
+    },
+    "reply_links": {
+      "type": "string",
+      "title": "Bead links in replies",
+      "description": "below: a row of links under each reply that names a bead, with the reply drawn as Claude Code draws it. inline: the IDs in the reply become links, but the desktop draws such a reply at a slightly different text size.",
+      "default": "below",
+      "options": ["below", "inline"]
     }
   }
 }

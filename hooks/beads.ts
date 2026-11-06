@@ -488,6 +488,7 @@ const ICON_PATHS = {
   acceptance: 'M2.5 4.5l1.2 1.2 2-2.2M7.5 4.8h6M2.5 10.5l1.2 1.2 2-2.2M7.5 10.8h6',
   spec: 'M4 2.5h5.5L12 5v8.5H4zM9.5 2.5V5H12',
   resolution: 'M8 2.5a5.5 5.5 0 1 1 0 11a5.5 5.5 0 1 1 0-11zM5.6 8.1l1.7 1.7 3.2-3.4',
+  comments: 'M3 3.5h10v7H7.5L4.5 13v-2.5H3z',
 } as const
 export type IconName = keyof typeof ICON_PATHS
 
@@ -498,6 +499,7 @@ const ICON_LEFT: Record<IconName, number> = {
   acceptance: 2.5,
   spec: 4,
   resolution: 2.5,
+  comments: 3,
 }
 
 // A section's icon, `size` pixels to its 16 units, starting at the glyph's
@@ -589,23 +591,6 @@ export const typeIcon = (
     `stroke-linecap="round" stroke-linejoin="round">` +
     `<title>${type.replace(/^./, c => c.toUpperCase())}</title><path d="${icon.path}"/></svg>`
   return { source, width: (size * (16 - x0)) / 16, height: size + 2 * lowerPx }
-}
-
-// A speech bubble with the count in it, as an SVG: a filled rounded box with
-// a tail, the number in bold white, wider for each digit. The colours are
-// fixed, since an SVG draws as an image without the theme; this blue reads on
-// a dark or a light pane.
-export const countBubble = (count: number): { source: string; width: number; height: number } => {
-  const label = String(count)
-  const width = 10 + 6 * label.length
-  const height = 17
-  const source =
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">` +
-    `<rect x="0.5" y="0.5" width="${width - 1}" height="12.5" rx="4" fill="#4f7cf7"/>` +
-    `<path d="M4 12.5 L4 16.5 L8.5 12.5 Z" fill="#4f7cf7"/>` +
-    `<text x="${width / 2}" y="10" text-anchor="middle" fill="#ffffff" font-size="9.5" ` +
-    `font-weight="700" font-family="-apple-system, system-ui, sans-serif">${label}</text></svg>`
-  return { source, width, height }
 }
 
 // The progress bar as an SVG a few pixels tall and as wide as its slot: a

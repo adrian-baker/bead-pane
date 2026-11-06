@@ -107,8 +107,11 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   )
   const ui = await $.ui.mount(msg)
   await settle(clock)
-  expect(textOf(await ui.find({ type: 'Markdown' }))).toBe(
-    'See [demo-a1b2c](https://beads.invalid/demo-a1b2c) and [demo-g5h6.4](https://beads.invalid/demo-g5h6.4). In code, `bd show demo-a1b2c` and\n\n```\nbd close demo-g5h6.4\n```\n\nstay as written, as does demo-nope.',
+  // The reply is drawn as Claude Code draws it, and the beads it names, the
+  // one in code alone included, are a row of links under it.
+  expect(textOf(await ui.find({ type: 'Markdown' }))).toBe(msg.props.text)
+  expect(textOf(await ui.find({ key: 'msg-m1' }))).toBe(
+    '[demo-a1b2c](https://beads.invalid/demo-a1b2c) · [demo-g5h6.4](https://beads.invalid/demo-g5h6.4)',
   )
   await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
 
@@ -312,22 +315,26 @@ test("the pane's list holds the beads this session's bd commands changed, kept c
   await pane.unmount()
 })
 
-test('IDs use the prefix bd reports for the project', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  on('process.run', fakeBd({ prefix: 'my-app', beads: { 'my-app-x1y2': row('my-app-x1y2') } }))
-  // The engine's own drawing of a message: its text as Markdown.
-  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
-    const { Markdown } = $.ui.resolve(e)
-    return <Markdown text={e.props.text} />
-  })
+test(
+  'IDs use the prefix bd reports for the project, linked in the reply when set inline',
+  { options: { reply_links: 'inline' } },
+  async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    on('process.run', fakeBd({ prefix: 'my-app', beads: { 'my-app-x1y2': row('my-app-x1y2') } }))
+    // The engine's own drawing of a message: its text as Markdown.
+    on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+      const { Markdown } = $.ui.resolve(e)
+      return <Markdown text={e.props.text} />
+    })
 
-  const ui = await $.ui.mount(message('See my-app-x1y2, not demo-a1b2c or app-x1y2.'))
-  await settle(clock)
-  expect(textOf(await ui.find({ type: 'Markdown' }))).toBe(
-    'See [my-app-x1y2](https://beads.invalid/my-app-x1y2), not demo-a1b2c or app-x1y2.',
-  )
-  await ui.unmount()
-})
+    const ui = await $.ui.mount(message('See my-app-x1y2, not demo-a1b2c or app-x1y2.'))
+    await settle(clock)
+    expect(textOf(await ui.find({ type: 'Markdown' }))).toBe(
+      'See [my-app-x1y2](https://beads.invalid/my-app-x1y2), not demo-a1b2c or app-x1y2.',
+    )
+    await ui.unmount()
+  },
+)
 
 test("the pane says when bd can't run", async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
@@ -579,10 +586,11 @@ test("the pane shows a bead's labels, external ref, spec and comments", async ($
   ).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: 'specs/importer.md' })).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: 'COMMENTS' })).toBeTruthy()
-  // The count is drawn in a speech bubble.
+  // Its icon is grey like the other sections', and the count follows the heading.
   const drawn = await pane.findAll({ type: 'Svg' })
   const alts = drawn.map(el => (el.props as { alt?: string } | undefined)?.alt)
-  expect(alts).toContain('2')
+  expect(alts).toContain('Comments')
+  expect(await pane.find({ type: 'Text', text: '2' })).toBeTruthy()
   // Oldest first, IDs linked.
   expect(textOf(await pane.find({ key: 'comment-0-text' }))).toBe('Seen again today.')
   expect(textOf(await pane.find({ key: 'comment-1-text' }))).toBe(
@@ -748,16 +756,13 @@ test('a resumed session links the beads an earlier one found before bd answers',
   })
 
   await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work/demo' })
-  // The first draw is already linked, so it's the last.
+  // The first draw already has the link, so it's the last.
   const ui = await $.ui.mount(message('See demo-a1b2c.'))
-  expect(textOf(await ui.find({ type: 'Markdown' }))).toBe(
-    'See [demo-a1b2c](https://beads.invalid/demo-a1b2c).',
-  )
+  const linkRow = async () => textOf(await ui.find({ key: 'msg-m1' }))
+  expect(await linkRow()).toBe('[demo-a1b2c](https://beads.invalid/demo-a1b2c)')
   await clock.advance(2000)
   await settle(clock)
-  expect(textOf(await ui.find({ type: 'Markdown' }))).toBe(
-    'See [demo-a1b2c](https://beads.invalid/demo-a1b2c).',
-  )
+  expect(await linkRow()).toBe('[demo-a1b2c](https://beads.invalid/demo-a1b2c)')
   await ui.unmount()
 })
 

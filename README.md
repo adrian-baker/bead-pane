@@ -1,8 +1,8 @@
 # bead-pane
 
-A Claude Code mod for [beads](https://github.com/steveyegge/beads). It turns each bead ID in
-Claude's replies, such as `demo-g5h6.4`, into a link. Clicking the link opens the bead in a side
-pane. The pane shows:
+A Claude Code mod for [beads](https://github.com/steveyegge/beads). Under each of Claude's
+replies that names a bead, such as `demo-g5h6.4`, it adds a row of links to those beads. Clicking
+one opens the bead in a side pane. The pane shows:
 
 - the title, status, priority, type, assignee and dates
 - the beads above it, as a breadcrumb
@@ -13,8 +13,8 @@ pane. The pane shows:
   each status that filters the list to it, and a link to all
 
 Bead IDs in the pane are links too, so you can move through the tree from there. An ID inside
-code, such as `` `bd show demo-g5h6` ``, stays as written, but code that holds an ID and nothing
-else, such as `` `demo-g5h6` ``, links. In a git checkout with a GitHub
+code, such as `` `bd show demo-g5h6` ``, isn't counted as a mention, but code that holds an ID and
+nothing else, such as `` `demo-g5h6` ``, is. In a git checkout with a GitHub
 `origin`, `PR 4503`, `#4501` and a pull request's or issue's URL link to that repository, and a
 link to a file that is only on a pushed branch goes to its copy on GitHub.
 
@@ -89,6 +89,11 @@ Or set it when installing from a shell:
 ```bash
 claude plugin install bead-pane --marketplace adrian-baker/bead-pane --config bd_path=/opt/homebrew/bin/bd
 ```
+
+The same command sets where a reply's bead links go, as `reply_links`. `below`, the default,
+adds the row under the reply. `inline` makes the IDs in the reply's text the links instead. In
+the desktop app an inline reply is drawn at a slightly smaller size than the replies around it
+([anthropics/claude-code#107850](https://github.com/anthropics/claude-code/issues/107850)).
 
 After creating a beads database for a session that had none, run `/beads` to look again.
 

@@ -3,7 +3,6 @@ import { expect, test } from 'claude-code/testing'
 import {
   barRuns,
   changedBy,
-  countBubble,
   datedEntries,
   fileLinks,
   keepLineBreaks,
@@ -119,14 +118,6 @@ test('comments come oldest first, and a missing date sorts first', () => {
   )
   expect(said.map(c => c.text)).toEqual(['undated', 'first', 'second'])
   expect(said[0]?.author).toBe('')
-})
-
-test('the comment bubble widens with the count and holds it', () => {
-  const one = countBubble(2)
-  const three = countBubble(128)
-  expect(three.width).toBeGreaterThan(one.width)
-  expect(one.source).toContain('>2</text>')
-  expect(three.source).toContain(`viewBox="0 0 ${three.width} ${three.height}"`)
 })
 
 test('dated entries need every line dated, and line breaks survive Markdown', () => {
