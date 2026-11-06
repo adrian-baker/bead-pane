@@ -1177,6 +1177,7 @@ export const register: Register = (on, options) => {
             {refHref !== null && md('ref', `[${refLabel(bead.externalRef)}](${refHref})`)}
             {/* Then, smaller, when it last changed, any ref that can't be a
                 link, and its labels: one row, wrapping on a narrow pane. */}
+            <Text color="subtle">·</Text>
             <Text size="caption" color="subtle">
               {[
                 bead.status === 'closed' && bead.closedMs !== null
