@@ -482,12 +482,14 @@ const TYPE_ICONS: Record<string, { path: string; colour: string }> = {
   },
 }
 
-// The icon for a type, as an SVG; null for a type bd added after this list.
+// The icon for a type, as an SVG whose title names the type for a tooltip;
+// null for a type bd added after this list.
 export const typeIconSvg = (type: string): string | null => {
   const icon = TYPE_ICONS[type]
   return icon
     ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="${icon.colour}" ` +
-        `stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="${icon.path}"/></svg>`
+        `stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">` +
+        `<title>${type.replace(/^./, c => c.toUpperCase())}</title><path d="${icon.path}"/></svg>`
     : null
 }
 

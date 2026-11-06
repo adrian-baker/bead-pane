@@ -1148,7 +1148,14 @@ export const register: Register = (on, options) => {
           <Box gap="sm" alignItems="flex-start">
             {Svg && typeIcon && (
               <Box paddingTop={0.25} flexShrink={0}>
-                <Svg key="type-icon" alt={bead.type} width={18} height={18} source={typeIcon} />
+                <Svg
+                  key="type-icon"
+                  alt={bead.type}
+                  width={18}
+                  height={18}
+                  source={typeIcon}
+                  isInteractive
+                />
               </Box>
             )}
             <Text size="heading" weight="semibold">
@@ -1167,8 +1174,11 @@ export const register: Register = (on, options) => {
               {bead.priority !== null && (
                 <Text color={priorityColor(bead.priority)}>P{bead.priority}</Text>
               )}
-              {bead.type !== '' && <Text color="subtle">{'  ·  '}</Text>}
-              {bead.type !== '' && bead.type.replace(/^./, c => c.toUpperCase())}
+              {/* The type in words only where no icon says it. */}
+              {bead.type !== '' && !(Svg && typeIcon) && <Text color="subtle">{'  ·  '}</Text>}
+              {bead.type !== '' &&
+                !(Svg && typeIcon) &&
+                bead.type.replace(/^./, c => c.toUpperCase())}
               <Text color="subtle">{'  ·  '}</Text>
               {bead.assignee ? bead.assignee : <Text color="subtle">Unassigned</Text>}
             </Text>
