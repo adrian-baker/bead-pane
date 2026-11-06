@@ -110,10 +110,19 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   // The reply is drawn as Claude Code draws it, and the beads it names, the
   // one in code alone included, are a row of links under it.
   expect(textOf(await ui.find({ type: 'Markdown' }))).toBe(msg.props.text)
-  expect(textOf(await ui.find({ key: 'msg-m1' }))).toBe(
-    '[demo-a1b2c](https://beads.invalid/demo-a1b2c) · [demo-g5h6.4](https://beads.invalid/demo-g5h6.4)',
+  // One line each, in the order named: the status glyph, the grey ID and the
+  // title as the link.
+  expect(keysOf((await ui.find({ key: 'msg-m1-beads' }))?.children)).toEqual([
+    'msg-m1-demo-a1b2c',
+    'msg-m1-demo-g5h6.4',
+  ])
+  expect(textOf(await ui.find({ key: 'msg-m1-demo-a1b2c-link' }))).toBe(
+    '[Tidy the importer](https://beads.invalid/demo-a1b2c)',
   )
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  await ui.press({
+    key: 'msg-m1-demo-a1b2c-link',
+    link: { href: 'https://beads.invalid/demo-a1b2c' },
+  })
 
   const pane = await $.ui.mount(PANE)
   await settle(clock)
@@ -171,7 +180,10 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   expect(await pane.find({ type: 'Text', text: /^mentioned$/ })).toBeFalsy()
 
   // Back to the bead from the conversation, and up to a parent bd doesn't know.
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  await ui.press({
+    key: 'msg-m1-demo-a1b2c-link',
+    link: { href: 'https://beads.invalid/demo-a1b2c' },
+  })
   await pane.press({ key: 'crumb-demo-p0000', link: { href: 'https://beads.invalid/demo-p0000' } })
   await settle(clock)
   expect(
@@ -204,7 +216,10 @@ test('a long list of children is summarised until opened', async ($, on) => {
 
   const ui = await $.ui.mount(message('See demo-epic1.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-epic1' } })
+  await ui.press({
+    key: 'msg-m1-demo-epic1-link',
+    link: { href: 'https://beads.invalid/demo-epic1' },
+  })
   await ui.unmount()
 
   const pane = await $.ui.mount(PANE)
@@ -457,7 +472,10 @@ test(
 
     const ui = await $.ui.mount(message('See demo-a1b2c.'))
     await settle(clock)
-    await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+    await ui.press({
+      key: 'msg-m1-demo-a1b2c-link',
+      link: { href: 'https://beads.invalid/demo-a1b2c' },
+    })
     const pane = await $.ui.mount(PANE)
     await settle(clock)
     expect(tailed).toEqual(['tail', '-c', '0', '-F', JOURNAL_PATH])
@@ -489,7 +507,10 @@ test('without a journal the pane polls while open, and stops once closed', async
 
   const ui = await $.ui.mount(message('See demo-a1b2c.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  await ui.press({
+    key: 'msg-m1-demo-a1b2c-link',
+    link: { href: 'https://beads.invalid/demo-a1b2c' },
+  })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
 
@@ -575,7 +596,10 @@ test("the pane shows a bead's labels, external ref, spec and comments", async ($
 
   const ui = await $.ui.mount(message('See demo-a1b2c.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  await ui.press({
+    key: 'msg-m1-demo-a1b2c-link',
+    link: { href: 'https://beads.invalid/demo-a1b2c' },
+  })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   expect(
@@ -624,7 +648,10 @@ test('moving to a bead not yet looked up keeps the last one until it loads', asy
 
   const ui = await $.ui.mount(message('See demo-a1b2c.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  await ui.press({
+    key: 'msg-m1-demo-a1b2c-link',
+    link: { href: 'https://beads.invalid/demo-a1b2c' },
+  })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
 
@@ -660,7 +687,10 @@ test('a slow lookup names the bead being opened after a moment', async ($, on) =
 
   const ui = await $.ui.mount(message('See demo-a1b2c.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  await ui.press({
+    key: 'msg-m1-demo-a1b2c-link',
+    link: { href: 'https://beads.invalid/demo-a1b2c' },
+  })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/demo-zz11' } })
@@ -690,7 +720,10 @@ test('a list all of one status offers no filter', async ($, on) => {
   })
   const ui = await $.ui.mount(message('See demo-epic2.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-epic2' } })
+  await ui.press({
+    key: 'msg-m1-demo-epic2-link',
+    link: { href: 'https://beads.invalid/demo-epic2' },
+  })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   expect(await pane.find({ key: 'count-open' })).toBeFalsy()
@@ -720,7 +753,10 @@ test('a deferred bead says when it comes back', async ($, on) => {
   })
   const ui = await $.ui.mount(message('See demo-later.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-later' } })
+  await ui.press({
+    key: 'msg-m1-demo-later-link',
+    link: { href: 'https://beads.invalid/demo-later' },
+  })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   expect(await pane.find({ type: 'Text', text: /Deferred until \S+ \S+/ })).toBeTruthy()
@@ -758,11 +794,12 @@ test('a resumed session links the beads an earlier one found before bd answers',
   await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work/demo' })
   // The first draw already has the link, so it's the last.
   const ui = await $.ui.mount(message('See demo-a1b2c.'))
-  const linkRow = async () => textOf(await ui.find({ key: 'msg-m1' }))
+  // Before bd answers, the remembered bead's line is its ID, linked.
+  const linkRow = async () => textOf(await ui.find({ key: 'msg-m1-demo-a1b2c-link' }))
   expect(await linkRow()).toBe('[demo-a1b2c](https://beads.invalid/demo-a1b2c)')
   await clock.advance(2000)
   await settle(clock)
-  expect(await linkRow()).toBe('[demo-a1b2c](https://beads.invalid/demo-a1b2c)')
+  expect(await linkRow()).toBe('[Title of demo-a1b2c](https://beads.invalid/demo-a1b2c)')
   await ui.unmount()
 })
 
@@ -786,7 +823,10 @@ test('dated notes show each entry under its date', async ($, on) => {
   })
   const ui = await $.ui.mount(message('See demo-a1b2c.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  await ui.press({
+    key: 'msg-m1-demo-a1b2c-link',
+    link: { href: 'https://beads.invalid/demo-a1b2c' },
+  })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   // A timestamped entry reads as time ago, as other times in the pane do.
@@ -820,7 +860,10 @@ test('PR and issue numbers in a bead link to its GitHub repository', async ($, o
   })
   const ui = await $.ui.mount(message('See demo-a1b2c.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  await ui.press({
+    key: 'msg-m1-demo-a1b2c-link',
+    link: { href: 'https://beads.invalid/demo-a1b2c' },
+  })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   expect(textOf(await pane.find({ key: 'desc' }))).toBe(
@@ -858,7 +901,10 @@ test('moving up to a parent with comments waits for them, then switches once', a
   })
   const ui = await $.ui.mount(message('See demo-epic3.1.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-epic3.1' } })
+  await ui.press({
+    key: 'msg-m1-demo-epic3.1-link',
+    link: { href: 'https://beads.invalid/demo-epic3.1' },
+  })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   // The parent is cached as an ancestor, without its comments.
@@ -897,7 +943,10 @@ test("a link to a file that isn't here goes to its copy on a pushed branch", asy
   })
   const ui = await $.ui.mount(message('See demo-a1b2c.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  await ui.press({
+    key: 'msg-m1-demo-a1b2c-link',
+    link: { href: 'https://beads.invalid/demo-a1b2c' },
+  })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   expect(textOf(await pane.find({ key: 'desc' }))).toBe(
@@ -929,7 +978,10 @@ test('a click from the list waits on the list, never on a bead shown before it',
   })
   const ui = await $.ui.mount(message('See demo-aaa1 and demo-bbb2.'))
   await settle(clock)
-  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-aaa1' } })
+  await ui.press({
+    key: 'msg-m1-demo-aaa1-link',
+    link: { href: 'https://beads.invalid/demo-aaa1' },
+  })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   await pane.press({ key: 'crumb-home', link: { href: 'https://beads.invalid/~home' } })

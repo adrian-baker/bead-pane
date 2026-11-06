@@ -1,7 +1,7 @@
 # bead-pane
 
 A Claude Code mod for [beads](https://github.com/steveyegge/beads). Under each of Claude's
-replies that names a bead, such as `demo-g5h6.4`, it adds a row of links to those beads. Clicking
+replies that names a bead, such as `demo-g5h6.4`, it lists those beads, each with its status and title as a link. Clicking
 one opens the bead in a side pane. The pane shows:
 
 - the title, status, priority, type, assignee and dates
@@ -91,7 +91,7 @@ claude plugin install bead-pane --marketplace adrian-baker/bead-pane --config bd
 ```
 
 The same command sets where a reply's bead links go, as `reply_links`. `below`, the default,
-adds the row under the reply. `inline` makes the IDs in the reply's text the links instead. In
+lists the beads under the reply. `inline` makes the IDs in the reply's text the links instead. In
 the desktop app an inline reply is drawn at a slightly smaller size than the replies around it
 ([anthropics/claude-code#107850](https://github.com/anthropics/claude-code/issues/107850)).
 

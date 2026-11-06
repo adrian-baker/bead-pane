@@ -660,12 +660,12 @@ export const register: Register = (on, options) => {
     if (links.length === 0) return next(e)
     markMentioned($, links)
 
-    const { Box, Markdown } = $.ui.resolve(e)
-    const linksMd = (text: string) => (
+    const { Box, Text, Markdown } = $.ui.resolve(e)
+    const linksMd = (key: string, text: string, hrefs: readonly string[]) => (
       <Markdown
-        key={`msg-${e.requestId}`}
+        key={key}
         text={text}
-        pressableLinks={links.map(id => `${BASE}${id}`)}
+        pressableLinks={hrefs}
         onLinkPress={link => {
           openPane($, link.href.slice(BASE.length)).catch(err =>
             logFailure($, 'opening a bead', err),
@@ -675,15 +675,42 @@ export const register: Register = (on, options) => {
     )
     if (isInline) {
       return linksMd(
+        `msg-${e.requestId}`,
         linkIds(e.props.text, found.prefix, id => (isBead(id) ? `[${id}](${BASE}${id})` : null)),
+        links.map(id => `${BASE}${id}`),
       )
     }
-    // The reply as Claude Code draws it, and under it a row of the beads it
-    // names, in the order it names them.
+    // The reply as Claude Code draws it, and under it a line for each bead it
+    // names, in the order it names them, drawn as the pane's rows are: the
+    // status glyph, the ID in grey and the title as the link. A bead only an
+    // earlier session found shows its ID as the link until bd answers.
     return (
       <Box flexDirection="column" gap="xs">
         {await next(e)}
-        {linksMd(links.map(id => `[${id}](${BASE}${id})`).join(' · '))}
+        <Box key={`msg-${e.requestId}-beads`} flexDirection="column">
+          {links.map(id => {
+            const entry = known[id]
+            const bead = entry?.kind === 'found' ? entry.bead : null
+            return (
+              <Box key={`msg-${e.requestId}-${id}`} gap="xs" alignItems="flex-start">
+                <Text
+                  color={bead ? statusOf(bead.status).color : 'subtle'}
+                  dimColor={bead?.status === 'closed'}
+                >
+                  {GLYPH[bead?.status ?? ''] ?? '○'}
+                </Text>
+                {bead && <Text color="subtle">{id}</Text>}
+                <Box flexGrow={1} flexShrink={1}>
+                  {linksMd(
+                    `msg-${e.requestId}-${id}-link`,
+                    `[${bead?.title || id}](${BASE}${id})`,
+                    [`${BASE}${id}`],
+                  )}
+                </Box>
+              </Box>
+            )
+          })}
+        </Box>
       </Box>
     )
   })
