@@ -15,7 +15,7 @@ pane. The pane shows:
 Bead IDs in the pane are links too, so you can move through the tree from there. An ID inside
 code, such as `` `bd show demo-g5h6` ``, stays as written.
 
-`/beads`, or ☰ at the start of the breadcrumb, lists the beads this session has touched, most
+`/beads`, or ≡ at the start of the breadcrumb, lists the beads this session has touched, most
 recent first. Beads it worked on come first, each with what it last did, then beads a reply only
 linked. The mod adds a bead when:
 

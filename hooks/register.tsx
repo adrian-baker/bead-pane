@@ -942,7 +942,7 @@ export const register: Register = (on, options) => {
       [...above, ...bead.blockedBy].flatMap(r => (r.id in all ? [] : [r.id])),
     )
 
-    // The breadcrumb: ☰ for the pane's list, then each bead above, then
+    // The breadcrumb: ≡ for the pane's list, then each bead above, then
     // this one, unlinked.
     const chain = [...above.map(r => r.id), id]
     const trail = trailLabels(chain)
@@ -957,8 +957,8 @@ export const register: Register = (on, options) => {
     }
     const isOpeningShown = waiting !== null && nowMs - waiting.sinceMs >= OPENING_MS
     const crumbs = isOpeningShown
-      ? `${link('~home', '☰')} › ${wanted} · *opening…*`
-      : `${link('~home', '☰')} › ${trail}`
+      ? `${link('~home', '≡')} › ${wanted} · *opening…*`
+      : `${link('~home', '≡')} › ${trail}`
 
     const status = statusOf(bead.status)
     const refHref = bead.externalRef === '' ? null : refUrl(bead.externalRef, repo)
@@ -1064,7 +1064,7 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column" gap="xs">
           {/* The breadcrumb row is always drawn, so the rest of the pane stays
               in place when it moves to another bead. It is the pane's only
-              navigation: ☰ leads to this session's beads, ancestors
+              navigation: ≡ leads to this session's beads, ancestors
               are links, and the conversation's links reopen anything else. */}
           <Box>{md('trail', crumbs)}</Box>
           <Text size="heading" weight="semibold">
