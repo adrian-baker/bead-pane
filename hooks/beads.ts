@@ -308,6 +308,23 @@ export const summarised = (kids: readonly Ref[], first: number): Ref[] => {
   return (left.length > 0 ? left : kids).slice(0, first)
 }
 
+// A speech bubble with the count in it, as an SVG: a filled rounded box with
+// a tail, the number in bold white, wider for each digit. The colours are
+// fixed, since an SVG draws as an image without the theme; this blue reads on
+// a dark or a light pane.
+export const countBubble = (count: number): { source: string; width: number; height: number } => {
+  const label = String(count)
+  const width = 10 + 6 * label.length
+  const height = 17
+  const source =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">` +
+    `<rect x="0.5" y="0.5" width="${width - 1}" height="12.5" rx="4" fill="#4f7cf7"/>` +
+    `<path d="M4 12.5 L4 16.5 L8.5 12.5 Z" fill="#4f7cf7"/>` +
+    `<text x="${width / 2}" y="10" text-anchor="middle" fill="#ffffff" font-size="9.5" ` +
+    `font-weight="700" font-family="-apple-system, system-ui, sans-serif">${label}</text></svg>`
+  return { source, width, height }
+}
+
 export const ago = (atMs: number | null, nowMs: number): string => {
   if (atMs === null) return '-'
   const mins = Math.max(0, Math.round((nowMs - atMs) / 60000))

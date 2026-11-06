@@ -6,6 +6,7 @@ import {
   ago,
   barRuns,
   changedBy,
+  countBubble,
   idsIn,
   isWork,
   linkIds,
@@ -27,10 +28,6 @@ const BASE = 'https://beads.invalid/'
 const PANE = 'bead'
 const TIMEOUT_MS = 10000
 const CONFIGURE = '/plugin configure bead-pane@bead-pane'
-const COMMENT_ICON =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="#8b8b8b" ' +
-  'stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 3h11v7.5H8L4.5 13v-2.5h-2z"/></svg>'
-
 // null: not asked yet this session.
 const setup = atom({ plugin: 'bead-pane', key: 'setup' } as const, null, {
   shape: 'setup-1',
@@ -597,23 +594,40 @@ export const register: Register = (on, options) => {
       heading: string,
       body: RenderChildren,
       color = 'subtle',
-      icon: RenderChildren = null,
+      badge: RenderChildren = null,
     ) => (
       <Box key={key} flexDirection="column" gap="xs">
         <Box gap="xs" alignItems="center">
-          {icon}
           <Text size="caption" weight="semibold" color={color}>
             {heading.toUpperCase()}
           </Text>
+          {badge}
         </Box>
         {body}
       </Box>
     )
     // A speech bubble's outline, in about the grey of the heading beside it:
     // an SVG draws as an image, so it can't take the theme's colour.
-    const commentIcon = Svg && (
-      <Svg key="comment-icon" alt="Comments" width={12} height={12} source={COMMENT_ICON} />
-    )
+    // The count in a speech bubble beside a heading, where the surface draws
+    // SVG; the terminal gets the count as text.
+    const bubble = (n: number) => {
+      if (!Svg)
+        return (
+          <Text size="caption" color="subtle">
+            {n}
+          </Text>
+        )
+      const drawn = countBubble(n)
+      return (
+        <Svg
+          key="count-bubble"
+          alt={`${n}`}
+          width={drawn.width}
+          height={drawn.height}
+          source={drawn.source}
+        />
+      )
+    }
     // A list of beads, one row each: the ID in a grey column, the status glyph,
     // and the title as the link. A closed bead's title isn't dimmed, because
     // dim link blue on a dark background is hard to read. Children show only
@@ -886,7 +900,7 @@ export const register: Register = (on, options) => {
           bead.comments.length > 0 &&
           section(
             'comments',
-            `Comments ${bead.comments.length}`,
+            'Comments',
             <Box flexDirection="column" gap="sm">
               {bead.comments.map((c, i) => (
                 <Box key={`comment-${i}`} flexDirection="column">
@@ -898,7 +912,7 @@ export const register: Register = (on, options) => {
               ))}
             </Box>,
             'subtle',
-            commentIcon,
+            bubble(bead.comments.length),
           )}
         {!isEpic && children}
       </Box>
