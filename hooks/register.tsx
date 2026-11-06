@@ -51,8 +51,6 @@ const branchSvg = (isLast: boolean): string =>
   `fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5" stroke-linecap="round">` +
   `<path d="${isLast ? 'M6 0V7Q6 11 10 11H14' : 'M6 0V22M6 11H14'}"/></svg>`
 
-const CHIP_ON = '#8080803d'
-const CHIP_HOVER = '#80808021'
 const EXTRA_ICONS: Record<string, IconName> = {
   Notes: 'notes',
   Design: 'design',
@@ -572,7 +570,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
-    const { Box, Text, Markdown } = elements
+    const { Box, Text, Markdown, Button } = elements
     // The terminal draws no SVG, so its headings go without an icon.
     const Svg = 'Svg' in elements ? elements.Svg : null
     const found = await read($, setup)
@@ -1087,36 +1085,24 @@ export const register: Register = (on, options) => {
               {counts.map(([st, n]) => {
                 const label = `${n} ${statusOf(st).label.toLowerCase()}`
                 const isOn = st === onlyStatus
-                // A chip per status at the text's own height: a soft grey
-                // pill marks the one on, and shows faintly under the pointer
-                // on the others. The grey is translucent, so it reads on a
-                // light or a dark pane. The terminal brackets the one on.
+                // A chip per status, a Button so a click anywhere on it
+                // counts: the one on drawn as the primary button. The
+                // terminal draws it plain, bracketing the one on.
                 const isTerminal = e.surface === 'terminal'
                 return (
-                  <Box
+                  <Button
                     key={`count-${st}`}
-                    gap="xs"
-                    alignItems="center"
-                    {...(isTerminal
-                      ? {}
-                      : {
-                          paddingX: 'xs' as const,
-                          ...(isOn
-                            ? { backgroundColor: CHIP_ON }
-                            : { hover: { backgroundColor: CHIP_HOVER } }),
-                        })}
+                    {...(isTerminal ? { plain: true as const } : {})}
+                    {...(isOn ? { variant: 'primary' as const } : {})}
+                    onPress={() => {
+                      press(`${BASE}~only:${st}`).catch(err =>
+                        logFailure($, 'filtering the children', err),
+                      )
+                    }}
                   >
-                    <Text size="footnote" color={statusOf(st).color}>
-                      {GLYPH[st] ?? '○'}
-                    </Text>
-                    {md(
-                      `count-${st}-link`,
-                      link(
-                        `~only:${st}`,
-                        isOn ? (isTerminal ? `[${label}]` : `**${label}**`) : label,
-                      ),
-                    )}
-                  </Box>
+                    <Text color={statusOf(st).color}>{GLYPH[st] ?? '○'}</Text>
+                    {isOn && isTerminal ? ` [${label}]` : ` ${label}`}
+                  </Button>
                 )
               })}
             </Box>
