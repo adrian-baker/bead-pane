@@ -1,0 +1,12 @@
+{
+  "name": "bead-pane",
+  "owner": {
+    "name": "Adrian Baker"
+  },
+  "plugins": [
+    {
+      "name": "bead-pane",
+      "source": "./"
+    }
+  ]
+}
