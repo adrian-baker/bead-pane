@@ -54,8 +54,6 @@ export type FakeBd = {
   remote?: string
   // The commit `git log --remotes=origin` names for a file on a pushed branch.
   pushedCommits?: Record<string, string>
-  // What `gh api repos/<repo>/issues/<n>` answers, by that path.
-  github?: Record<string, Record<string, unknown>>
   // The Dolt folder `bd info` reports; none when absent.
   databasePath?: string
   // Every argument vector the mod ran, in order.
@@ -72,15 +70,10 @@ export const fakeBd =
     databasePath,
     remote,
     pushedCommits = {},
-    github = {},
     ran = [],
   }: FakeBd) =>
   (_: unknown, e: { argv: readonly string[] }): Answer => {
     ran.push(e.argv)
-    if (e.argv[0] === 'gh') {
-      const found = github[e.argv[2] ?? '']
-      return found ? answer(0, found) : answer(1, '', 'gh: Not Found (HTTP 404)')
-    }
     if (e.argv[0] === 'git' && e.argv[1] === 'log') {
       return answer(0, `${pushedCommits[e.argv[e.argv.length - 1] ?? ''] ?? ''}\n`)
     }

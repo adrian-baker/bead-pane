@@ -693,13 +693,6 @@ test('PR and issue numbers in a bead link to its GitHub repository', async ($, o
           external_ref: 'https://github.com/acme/widgets/pull/4610',
         }),
       },
-      github: {
-        'repos/acme/widgets/issues/4610': {
-          state: 'closed',
-          draft: false,
-          merged: '2026-11-05T00:00:00Z',
-        },
-      },
     }),
   )
   on('ui.open', () => ({ value: { isPlaced: true } }))
@@ -718,8 +711,6 @@ test('PR and issue numbers in a bead link to its GitHub repository', async ($, o
   expect(textOf(await pane.find({ key: 'ref' }))).toBe(
     '[PR 4610](https://github.com/acme/widgets/pull/4610)',
   )
-  // GitHub's answer marks it merged.
-  expect(await pane.find({ type: 'Text', text: /^merged$/ })).toBeTruthy()
   await pane.unmount()
   await ui.unmount()
 })

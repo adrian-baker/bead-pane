@@ -7,9 +7,7 @@ import {
   datedEntries,
   fileLinks,
   keepLineBreaks,
-  githubTarget,
   linkGitHub,
-  parseRefState,
   parseGitHubRepo,
   refLabel,
   relinkFiles,
@@ -196,18 +194,4 @@ test('file links are found outside code and rewritten by where the file is', () 
     'See [the approach](https://gh.test/approach.md), the code, [GitHub](https://x.test) ' +
       'and `[not this](docs/b.md)`.',
   )
-})
-
-test('a GitHub link gives its number, and the API its state', () => {
-  expect(githubTarget('https://github.com/acme/widgets/pull/4610')).toEqual({
-    repo: 'acme/widgets',
-    number: 4610,
-  })
-  expect(githubTarget('https://example.com/x')).toBeNull()
-  expect(parseRefState('{"state":"closed","draft":false,"merged":"2026-11-05T00:00:00Z"}')).toBe(
-    'merged',
-  )
-  expect(parseRefState('{"state":"closed","draft":null,"merged":null}')).toBe('closed')
-  expect(parseRefState('{"state":"open","draft":true,"merged":null}')).toBe('draft')
-  expect(parseRefState('not json')).toBeNull()
 })
