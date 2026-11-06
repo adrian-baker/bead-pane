@@ -26,8 +26,9 @@ export type Lookup =
   { kind: 'found'; bead: Bead } | { kind: 'missing' } | { kind: 'failed'; detail: string }
 
 // What the session last did to a bead. `assigned` is a bead the session's
-// BEADS_ACTOR holds, and `in title` one the session's title names, that no
-// command in this load touched.
+// BEADS_ACTOR holds, `in title` one the session's title names, `viewed` one
+// opened in the pane, and `mentioned` one a reply linked, that no command in
+// this load touched.
 export type How =
   | 'created'
   | 'closed'
@@ -39,6 +40,8 @@ export type How =
   | 'claimed'
   | 'assigned'
   | 'in title'
+  | 'viewed'
+  | 'mentioned'
 
 // What asking bd for the project's ID prefix found.
 export type Setup =

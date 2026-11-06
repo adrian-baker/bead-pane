@@ -18,6 +18,7 @@ first, with what it last did to each. The mod adds a bead when:
 
 - a `bd` command in the session claims, creates, updates, comments on, links, closes or reopens
   it, a subagent's command included
+- a reply links it, or you open it in the pane
 - the session's title names it as the session starts or resumes
 - it's open and assigned to the session's `BEADS_ACTOR`, which covers a claim made before the
   mod loaded. Without `BEADS_ACTOR` the mod skips this.

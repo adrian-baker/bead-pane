@@ -109,11 +109,21 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   expect(await pane.find({ type: 'Text', text: /Its blocker is closed/ })).toBeTruthy()
 
   // A link in the description moves the pane, and the breadcrumb leads back up.
+  await clock.advance(1000)
   await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/demo-d3e4f' } })
   await settle(clock)
   expect(await text('trail')).toBe('[Recent](https://beads.invalid/~home) › demo-d3e4f')
+  // The beads opened are in the list, the latest first, and the reply's
+  // other link as mentioned.
   await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/~home' } })
-  expect(await pane.find({ type: 'Text', text: /^None yet\./ })).toBeTruthy()
+  await settle(clock)
+  expect(keysOf((await pane.find({ key: 'session' }))?.children)).toEqual([
+    'session-demo-d3e4f',
+    'session-demo-a1b2c',
+    'session-demo-g5h6.4',
+  ])
+  expect(await pane.findAll({ type: 'Text', text: /^viewed$/ })).toHaveLength(2)
+  expect(await pane.find({ type: 'Text', text: /^mentioned$/ })).toBeTruthy()
 
   // Back to the bead from the conversation, and up to a parent bd doesn't know.
   await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })

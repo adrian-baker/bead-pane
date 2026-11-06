@@ -325,8 +325,41 @@ async function refreshShown($: EngineInterface, bd: string): Promise<void> {
 
 // Opens the pane on one bead, or on the session's list for null.
 async function openPane($: EngineInterface, id: string | null): Promise<void> {
+  if (id !== null) await markViewed($, id)
   await update($, selected, () => id)
   await $.ui.open({ id: PANE, title: 'Beads' })
+}
+
+// Puts a bead opened in the pane at the top of the session's list. A bead the
+// session changed keeps what it did, such as `claimed`.
+async function markViewed($: EngineInterface, id: string): Promise<void> {
+  const atMs = await $.clock.now()
+  await update($, touched, all => {
+    const was = all[id]?.how
+    return { ...all, [id]: { how: was && was !== 'mentioned' ? was : 'viewed', atMs } }
+  })
+}
+
+// Bead IDs a reply has linked this load, so each is added to the list once.
+const mentioned = new Set<string>()
+
+// From a draw: adds the beads a reply linked to the session's list, after the
+// draw, unless the list already has them.
+function markMentioned($: EngineInterface, ids: readonly string[]): void {
+  const fresh = ids.filter(id => !mentioned.has(id))
+  if (fresh.length === 0) return
+  for (const id of fresh) mentioned.add(id)
+  $.clock.after(0, () => {
+    addMentioned($, fresh).catch(err => logFailure($, 'listing mentioned beads', err))
+  })
+}
+
+async function addMentioned($: EngineInterface, ids: readonly string[]): Promise<void> {
+  const atMs = await $.clock.now()
+  await update($, touched, all => ({
+    ...Object.fromEntries(ids.map(id => [id, { how: 'mentioned' as const, atMs }])),
+    ...all,
+  }))
 }
 
 export const register: Register = (on, options) => {
@@ -415,6 +448,7 @@ export const register: Register = (on, options) => {
     // Only a bead the lookup found becomes a link; the rest stays text.
     const links = ids.filter(id => known[id]?.kind === 'found')
     if (links.length === 0) return next(e)
+    markMentioned($, links)
 
     const { Markdown } = $.ui.resolve(e)
     const text = linkIds(e.props.text, found.prefix, id =>
@@ -484,6 +518,7 @@ export const register: Register = (on, options) => {
       if (target === '~all') return update($, expanded, v => (v === id ? null : id))
       if (target === '~home') return update($, selected, () => null)
       refresh($, bd, [target])
+      await markViewed($, target)
       return update($, selected, () => target)
     }
     const md = (key: string, text: string) => {
@@ -571,7 +606,7 @@ export const register: Register = (on, options) => {
         list('session', rows, '', notes)
       ) : (
         <Text color="subtle">
-          None yet. A bead this session claims, creates, changes or closes shows here.
+          None yet. A bead this session links, opens, claims, creates, changes or closes shows here.
         </Text>
       )
     }
