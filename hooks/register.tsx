@@ -30,6 +30,7 @@ import {
   parseShown,
   summarised,
   trailLabels,
+  typeIconSvg,
   underParents,
   relinkFiles,
 } from './beads'
@@ -48,7 +49,7 @@ const BRANCH_COLOUR = '#5a5a5a'
 const branchSvg = (isLast: boolean): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${BRANCH_WIDTH} ${BRANCH_HEIGHT}" ` +
   `fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5" stroke-linecap="round">` +
-  `<path d="${isLast ? 'M1 0V7Q1 11 5 11H13' : 'M1 0V22M1 11H13'}"/></svg>`
+  `<path d="${isLast ? 'M6 0V7Q6 11 10 11H14' : 'M6 0V22M6 11H14'}"/></svg>`
 
 const CHIP_ON = '#8080803d'
 const CHIP_HOVER = '#80808021'
@@ -800,36 +801,19 @@ export const register: Register = (on, options) => {
       return (
         <Box key={key} flexDirection="column" gap={spaced && !isBranch ? 'xs' : undefined}>
           {refs.map((r, i) => (
-            <Box
-              key={`${rowKey}-${r.id}`}
-              gap="xs"
-              alignItems={isBranch && Svg ? 'stretch' : 'flex-start'}
-            >
-              {/* A child's line back to its parent: drawn where the surface
-                  draws SVG, as box characters in the terminal. The branch
-                  turns into the row's first line; below it, a zero-width
-                  bordered Box carries the line down the rest of the row
-                  however far the title wraps, and the rows touch, so the
-                  line runs unbroken to the next child. */}
+            <Box key={`${rowKey}-${r.id}`} gap="xs" alignItems="flex-start">
+              {/* A child's branch back to its parent, one line tall: drawn
+                  where the surface draws SVG, box characters in the terminal.
+                  The rows touch, so the line runs on to the next child. */}
               {isBranch &&
                 (Svg ? (
-                  <Box flexDirection="column" flexShrink={0}>
-                    <Svg
-                      key={`${rowKey}-${r.id}-branch`}
-                      alt=""
-                      width={BRANCH_WIDTH}
-                      height={BRANCH_HEIGHT}
-                      source={branchSvg(i === refs.length - 1)}
-                    />
-                    {i < refs.length - 1 && (
-                      <Box
-                        flexGrow={1}
-                        width={0}
-                        borderStyle="single"
-                        borderColor={BRANCH_COLOUR}
-                      />
-                    )}
-                  </Box>
+                  <Svg
+                    key={`${rowKey}-${r.id}-branch`}
+                    alt=""
+                    width={BRANCH_WIDTH}
+                    height={BRANCH_HEIGHT}
+                    source={branchSvg(i === refs.length - 1)}
+                  />
                 ) : (
                   <Text color="subtle">{i === refs.length - 1 ? '└' : '├'}</Text>
                 ))}
@@ -1056,6 +1040,7 @@ export const register: Register = (on, options) => {
     const refHref = bead.externalRef === '' ? null : refUrl(bead.externalRef, repo)
 
     const isBlocked = bead.blockedBy.some(b => b.status !== 'closed')
+    const typeIcon = typeIconSvg(bead.type)
 
     // Children whose IDs nest under this bead's come first, in ID order, so
     // they set the ID column; a child filed elsewhere comes after them.
@@ -1158,9 +1143,18 @@ export const register: Register = (on, options) => {
               navigation: ≡ leads to this session's beads, ancestors
               are links, and the conversation's links reopen anything else. */}
           <Box>{md('trail', crumbs)}</Box>
-          <Text size="heading" weight="semibold">
-            {bead.title}
-          </Text>
+          {/* The type's icon leads the title, so an epic, a task and a bug
+              look different at a glance; the status line names the type. */}
+          <Box gap="sm" alignItems="flex-start">
+            {Svg && typeIcon && (
+              <Box paddingTop={0.25} flexShrink={0}>
+                <Svg key="type-icon" alt={bead.type} width={18} height={18} source={typeIcon} />
+              </Box>
+            )}
+            <Text size="heading" weight="semibold">
+              {bead.title}
+            </Text>
+          </Box>
           {/* Status, priority, type and assignee, then where the bead is
               tracked elsewhere, as a link where it can be one. */}
           <Box gap="xs" alignItems="center" flexWrap="wrap">

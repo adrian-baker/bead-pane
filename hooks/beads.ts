@@ -460,6 +460,37 @@ export const underParents = (
       : [...groups, { parent, rows: [row] }]
   }, [])
 
+// An icon for each of bd's issue types, drawn beside a bead's title in the
+// type's colour: fixed colours, since an SVG draws as an image without the
+// theme, each one that reads on a light or a dark pane.
+const TYPE_ICONS: Record<string, { path: string; colour: string }> = {
+  epic: { path: 'M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z', colour: '#a371f7' },
+  task: { path: 'M3 3h10v10H3zM5.5 8.2l1.8 1.8 3.4-3.8', colour: '#6f9cef' },
+  bug: {
+    path: 'M5.5 6h5v4.5a2.5 2.5 0 0 1-5 0zM8 6v7M5.5 8.5H3M10.5 8.5H13M5.5 11H3.5M10.5 11h2M6 6L5 3.5M10 6l1-2.5',
+    colour: '#e07070',
+  },
+  feature: {
+    path: 'M8 2l1.8 3.8 4.2.5-3.1 2.8.9 4.1L8 11.1 4.2 13.2l.9-4.1L2 6.3l4.2-.5z',
+    colour: '#5e9b4f',
+  },
+  decision: { path: 'M8 14V2M8 3h4.5L14 4.5 12.5 6H8M8 7.5H3.5L2 9l1.5 1.5H8', colour: '#d29b3a' },
+  spike: { path: 'M6 2h4M6.5 2v4L3 13h10L9.5 6V2', colour: '#3fb5b5' },
+  chore: {
+    path: 'M10.5 2.5a3 3 0 0 0-3 4L3 11l2 2 4.5-4.5a3 3 0 0 0 4-3l-1.8 1.8-1.7-1.7 1.8-1.8a3 3 0 0 0-1.3-.3z',
+    colour: '#8b8b8b',
+  },
+}
+
+// The icon for a type, as an SVG; null for a type bd added after this list.
+export const typeIconSvg = (type: string): string | null => {
+  const icon = TYPE_ICONS[type]
+  return icon
+    ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="${icon.colour}" ` +
+        `stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="${icon.path}"/></svg>`
+    : null
+}
+
 // A speech bubble with the count in it, as an SVG: a filled rounded box with
 // a tail, the number in bold white, wider for each digit. The colours are
 // fixed, since an SVG draws as an image without the theme; this blue reads on
