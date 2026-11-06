@@ -137,7 +137,9 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
 test('a long list of children is summarised until opened', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const kids = Array.from({ length: 20 }, (_, i) =>
-    row(`demo-epic1.${i + 1}`, { status: i < 15 ? 'closed' : 'open' }),
+    row(`demo-epic1.${i + 1}`, {
+      status: i < 15 ? 'closed' : i < 17 ? 'in_progress' : 'open',
+    }),
   )
   on(
     'process.run',
@@ -166,15 +168,16 @@ test('a long list of children is summarised until opened', async ($, on) => {
     [16, 17, 18, 19, 20].map(n => `kids-demo-epic1.${n}`),
   )
   expect(await pane.find({ type: 'Text', text: /^15\/20$/ })).toBeTruthy()
-  expect(textOf(await pane.find({ key: 'count-open-link' }))).toContain('5 open')
-  // The bar is 20 cells: 15 closed, then 5 open.
+  expect(textOf(await pane.find({ key: 'count-open-link' }))).toContain('3 open')
+  expect(textOf(await pane.find({ key: 'count-in_progress-link' }))).toContain('2 in progress')
+  // The bar is 20 cells: 15 closed, 2 in progress, 3 open.
   expect(await pane.find({ type: 'Text', text: /^━{15}$/ })).toBeTruthy()
-  expect(await pane.find({ type: 'Text', text: /^━{5}$/ })).toBeTruthy()
+  expect(await pane.find({ type: 'Text', text: /^━{3}$/ })).toBeTruthy()
   expect(textOf(await pane.find({ key: 'all' }))).toContain('Show all 20')
   // A status count narrows the list to that status, and pressing it again clears it.
   await pane.press({ key: 'count-open-link', link: { href: 'https://beads.invalid/~only:open' } })
-  expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toHaveLength(5)
-  expect(textOf(await pane.find({ key: 'count-open-link' }))).toContain('**5 open**')
+  expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toHaveLength(3)
+  expect(textOf(await pane.find({ key: 'count-open-link' }))).toContain('**3 open**')
   expect(await pane.find({ key: 'all' })).toBeFalsy()
   await pane.press({ key: 'count-open-link', link: { href: 'https://beads.invalid/~only:open' } })
   expect(textOf(await pane.find({ key: 'all' }))).toContain('Show all 20')
@@ -519,8 +522,9 @@ test("the pane shows a bead's labels, external ref, spec and comments", async ($
   expect(await pane.find({ type: 'Text', text: 'specs/importer.md' })).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: 'COMMENTS' })).toBeTruthy()
   // The count is drawn in a speech bubble.
-  const counted = await pane.find({ type: 'Svg' })
-  expect((counted?.props as { alt?: string } | undefined)?.alt).toBe('2')
+  const drawn = await pane.findAll({ type: 'Svg' })
+  const alts = drawn.map(el => (el.props as { alt?: string } | undefined)?.alt)
+  expect(alts).toContain('2')
   // Oldest first, IDs linked.
   expect(textOf(await pane.find({ key: 'comment-0-text' }))).toBe('Seen again today.')
   expect(textOf(await pane.find({ key: 'comment-1-text' }))).toBe(
@@ -607,6 +611,66 @@ test('a slow lookup names the bead being opened after a moment', async ($, on) =
   expect(textOf(await pane.find({ key: 'trail' }))).toBe(
     '[☰](https://beads.invalid/~home) › demo-zz11',
   )
+  await pane.unmount()
+  await ui.unmount()
+})
+
+test('a list with one status left offers no filter', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const kids = Array.from({ length: 14 }, (_, i) =>
+    row(`demo-epic2.${i + 1}`, { status: i < 10 ? 'closed' : 'open' }),
+  )
+  on(
+    'process.run',
+    fakeBd({
+      beads: { 'demo-epic2': row('demo-epic2', { issue_type: 'epic', dependent_count: 14 }) },
+      children: { 'demo-epic2': kids },
+    }),
+  )
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+  const ui = await $.ui.mount(message('See demo-epic2.'))
+  await settle(clock)
+  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-epic2' } })
+  const pane = await $.ui.mount(PANE)
+  await settle(clock)
+  expect(await pane.find({ key: 'count-open-link' })).toBeFalsy()
+  expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toHaveLength(4)
+  await pane.unmount()
+  await ui.unmount()
+})
+
+test('dated notes show each entry under its date', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  on(
+    'process.run',
+    fakeBd({
+      beads: {
+        'demo-a1b2c': row('demo-a1b2c', {
+          notes: '2026-11-06: Confirmed by token.\n2026-11-05 23:28Z: Mail arrived.',
+          description: 'First line.\nSecond line.',
+        }),
+      },
+    }),
+  )
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+  const ui = await $.ui.mount(message('See demo-a1b2c.'))
+  await settle(clock)
+  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  const pane = await $.ui.mount(PANE)
+  await settle(clock)
+  expect(await pane.find({ type: 'Text', text: '2026-11-05 23:28Z' })).toBeTruthy()
+  expect(textOf(await pane.find({ key: 'note-0-text' }))).toBe('Confirmed by token.')
+  expect(textOf(await pane.find({ key: 'note-1-text' }))).toBe('Mail arrived.')
+  // A single line break in other text stays a break.
+  expect(textOf(await pane.find({ key: 'desc' }))).toBe('First line.  \nSecond line.')
   await pane.unmount()
   await ui.unmount()
 })

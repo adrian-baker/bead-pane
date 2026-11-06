@@ -4,6 +4,8 @@ import {
   barRuns,
   changedBy,
   countBubble,
+  datedEntries,
+  keepLineBreaks,
   idsIn,
   isWork,
   linkIds,
@@ -120,4 +122,14 @@ test('the comment bubble widens with the count and holds it', () => {
   expect(three.width).toBeGreaterThan(one.width)
   expect(one.source).toContain('>2</text>')
   expect(three.source).toContain(`viewBox="0 0 ${three.width} ${three.height}"`)
+})
+
+test('dated entries need every line dated, and line breaks survive Markdown', () => {
+  expect(datedEntries('2026-11-06: a\n2026-11-05 23:28Z: b')).toEqual([
+    { when: '2026-11-06', text: 'a' },
+    { when: '2026-11-05 23:28Z', text: 'b' },
+  ])
+  expect(datedEntries('2026-11-06: a\nplain line')).toBeNull()
+  expect(datedEntries('2026-11-06: only one')).toBeNull()
+  expect(keepLineBreaks('a\nb\n\nc')).toBe('a  \nb\n\nc')
 })

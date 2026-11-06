@@ -308,6 +308,39 @@ export const summarised = (kids: readonly Ref[], first: number): Ref[] => {
   return (left.length > 0 ? left : kids).slice(0, first)
 }
 
+// Each line break the writer typed stays a line break: Markdown would join
+// lines a single newline separates into one paragraph.
+export const keepLineBreaks = (text: string): string => text.replace(/([^\n])\n(?!\n)/g, '$1  \n')
+
+// Notes written as dated entries, one per line (`2026-11-06: …`), as an agent
+// appending to them does. Null when the notes aren't all entries like that.
+const DATED = /^(\d{4}-\d{2}-\d{2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?Z?)?):\s*(.*)$/
+export const datedEntries = (text: string): { when: string; text: string }[] | null => {
+  const lines = text.split('\n').filter(line => line.trim() !== '')
+  const entries = lines.map(line => line.match(DATED))
+  return entries.length > 1 && entries.every(m => m !== null)
+    ? entries.map(m => ({ when: m?.[1] ?? '', text: m?.[2] ?? '' }))
+    : null
+}
+
+// Small outline icons for the pane's section headings, 16 units square, in a
+// grey that reads on a light or a dark pane: an SVG draws as an image, so it
+// can't take the theme's colours.
+const ICON_PATHS = {
+  description: 'M3 4.5h10M3 8h10M3 11.5h6',
+  notes: 'M3.5 2.5h9v11h-9zM6 6h4M6 9h4',
+  design: 'M3 13l.8-3L10.5 3.3l2.2 2.2L6 12.2zM9.3 4.5l2.2 2.2',
+  acceptance: 'M2.5 4.5l1.2 1.2 2-2.2M7.5 4.8h6M2.5 10.5l1.2 1.2 2-2.2M7.5 10.8h6',
+  spec: 'M4 2.5h5.5L12 5v8.5H4zM9.5 2.5V5H12',
+  resolution: 'M8 2.5a5.5 5.5 0 1 1 0 11a5.5 5.5 0 1 1 0-11zM5.6 8.1l1.7 1.7 3.2-3.4',
+} as const
+export type IconName = keyof typeof ICON_PATHS
+
+export const iconSvg = (name: IconName): string =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="#8b8b8b" ` +
+  `stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">` +
+  `<path d="${ICON_PATHS[name]}"/></svg>`
+
 // A speech bubble with the count in it, as an SVG: a filled rounded box with
 // a tail, the number in bold white, wider for each digit. The colours are
 // fixed, since an SVG draws as an image without the theme; this blue reads on

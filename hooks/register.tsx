@@ -2,11 +2,15 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, ProcessRunResult, Register, RenderChildren } from 'claude-code'
 
 import type { Lookup, Ref, Setup } from '../types'
+import type { IconName } from './beads'
 import {
   ago,
   barRuns,
   changedBy,
   countBubble,
+  datedEntries,
+  iconSvg,
+  keepLineBreaks,
   idsIn,
   isWork,
   linkIds,
@@ -28,6 +32,11 @@ const BASE = 'https://beads.invalid/'
 const PANE = 'bead'
 const TIMEOUT_MS = 10000
 const CONFIGURE = '/plugin configure bead-pane@bead-pane'
+const EXTRA_ICONS: Record<string, IconName> = {
+  Notes: 'notes',
+  Design: 'design',
+  'Acceptance criteria': 'acceptance',
+}
 // null: not asked yet this session.
 const setup = atom({ plugin: 'bead-pane', key: 'setup' } as const, null, {
   shape: 'setup-1',
@@ -586,7 +595,26 @@ export const register: Register = (on, options) => {
     // An ID in prose keeps its hyphen from breaking the line (`demo-` /
     // `g5h6`): the label gets a non-breaking hyphen, the link keeps the real ID.
     const linkify = (text: string) =>
-      linkIds(text, prefix, ref => link(ref, ref.replace(/-/g, '‑')))
+      keepLineBreaks(linkIds(text, prefix, ref => link(ref, ref.replace(/-/g, '‑'))))
+
+    // Notes written as dated entries show each entry under its date; any other
+    // text keeps the line breaks it was written with.
+    const notesBody = (label: string, text: string) => {
+      const entries = label === 'Notes' ? datedEntries(text) : null
+      if (!entries) return md(`text-${label}`, linkify(text))
+      return (
+        <Box key={`text-${label}`} flexDirection="column" gap="sm">
+          {entries.map((entry, i) => (
+            <Box key={`note-${i}`} flexDirection="column">
+              <Text size="caption" color="subtle">
+                {entry.when}
+              </Text>
+              {md(`note-${i}-text`, linkify(entry.text))}
+            </Box>
+          ))}
+        </Box>
+      )
+    }
 
     // A section: a small upper-case heading over its content.
     const section = (
@@ -595,9 +623,13 @@ export const register: Register = (on, options) => {
       body: RenderChildren,
       color = 'subtle',
       badge: RenderChildren = null,
+      icon: IconName | null = null,
     ) => (
       <Box key={key} flexDirection="column" gap="xs">
         <Box gap="xs" alignItems="center">
+          {icon && Svg && (
+            <Svg key={`${key}-icon`} alt="" width={13} height={13} source={iconSvg(icon)} />
+          )}
           <Text size="caption" weight="semibold" color={color}>
             {heading.toUpperCase()}
           </Text>
@@ -632,24 +664,32 @@ export const register: Register = (on, options) => {
     // and the title as the link. A closed bead's title isn't dimmed, because
     // dim link blue on a dark background is hard to read. Children show only
     // their own `.n`, since the parent's ID is in the breadcrumb.
-    const list = (key: string, refs: Ref[], parentId = '', notes: Record<string, string> = {}) => {
+    // `spaced` puts a little room between rows, for a list read one bead at a time.
+    const list = (
+      key: string,
+      refs: Ref[],
+      parentId = '',
+      notes: Record<string, string> = {},
+      spaced = false,
+    ) => {
       const shortOf = (r: Ref) =>
         parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
-      // The ID column is as wide as the longest ID in this list and no wider:
-      // `.1`–`.7` take two cells, a list that reaches `.178` takes four.
-      // The ID sits right against the glyph. The desktop's digits are
-      // narrower than the cells the column is measured in, so the column's
-      // slack is the space between them; the terminal's are a full cell, so
-      // the column gets one more.
+      // The ID column is as wide as the longest ID in the list, and each ID is
+      // right-aligned against its glyph, so the glyphs and titles form one
+      // straight column and numbers line up on their last digit, as in a
+      // table. The terminal's cells fit its digits exactly, so there the ID
+      // takes a trailing space; the desktop's narrower digits leave that room.
       const idWidth =
         Math.max(...refs.map(r => shortOf(r).length)) + (e.surface === 'terminal' ? 1 : 0)
       return (
-        <Box key={key} flexDirection="column">
+        <Box key={key} flexDirection="column" gap={spaced ? 'xs' : undefined}>
           {refs.map(r => (
             <Box key={`${key}-${r.id}`} gap="xs" alignItems="flex-start">
               <Box flexShrink={0}>
-                <Box width={idWidth}>
-                  <Text color="subtle">{shortOf(r)}</Text>
+                <Box width={idWidth} justifyContent="flex-end">
+                  <Text color="subtle">
+                    {e.surface === 'terminal' ? `${shortOf(r)} ` : shortOf(r)}
+                  </Text>
                 </Box>
                 <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
                   {GLYPH[r.status] ?? '○'}
@@ -701,9 +741,9 @@ export const register: Register = (on, options) => {
       return (
         <Box flexDirection="column" gap="lg">
           {worked.length > 0 &&
-            section('worked-section', 'Worked on', list('worked', worked, '', notes))}
+            section('worked-section', 'Worked on', list('worked', worked, '', notes, true))}
           {looked.length > 0 &&
-            section('mentioned-section', 'Mentioned', list('mentioned', looked))}
+            section('mentioned-section', 'Mentioned', list('mentioned', looked, '', {}, true))}
         </Box>
       )
     }
@@ -766,7 +806,10 @@ export const register: Register = (on, options) => {
     const openBlockers = bead.blockedBy.filter(b => b.status !== 'closed')
     const doneBlockers = bead.blockedBy.length - openBlockers.length
 
-    const kids = bead.children
+    // Children whose IDs nest under this bead's come first, in ID order, so
+    // they set the ID column; a child filed elsewhere comes after them.
+    const nests = (r: Ref) => r.id.startsWith(`${id}.`)
+    const kids = [...bead.children.filter(nests), ...bead.children.filter(r => !nests(r))]
     const doneKids = kids.filter(k => k.status === 'closed')
     // A bar with a run of cells in each status's colour, done first, as the
     // context bar shows what fills the window.
@@ -807,7 +850,9 @@ export const register: Register = (on, options) => {
             ))}
           </Text>
         </Box>
-        {isLong && counts.length > 0 && (
+        {/* With one status left, the list already shows just those, so a
+            filter would add nothing. */}
+        {isLong && counts.length > 1 && (
           <Box gap="md" flexWrap="wrap">
             {counts.map(([st, n]) => {
               const label = `${n} ${statusOf(st).label.toLowerCase()}`
@@ -887,14 +932,36 @@ export const register: Register = (on, options) => {
         )}
         {isEpic && children}
         {bead.description.trim() !== '' &&
-          section('description', 'Description', md('desc', linkify(bead.description)))}
+          section(
+            'description',
+            'Description',
+            md('desc', linkify(bead.description)),
+            'subtle',
+            null,
+            'description',
+          )}
         {bead.status === 'closed' &&
           bead.closeReason.trim() !== '' &&
-          section('resolution', 'Resolution', md('text-resolution', linkify(bead.closeReason)))}
+          section(
+            'resolution',
+            'Resolution',
+            md('text-resolution', linkify(bead.closeReason)),
+            'subtle',
+            null,
+            'resolution',
+          )}
         {bead.extras.map(x =>
-          section(`extra-${x.label}`, x.label, md(`text-${x.label}`, linkify(x.text))),
+          section(
+            `extra-${x.label}`,
+            x.label,
+            notesBody(x.label, x.text),
+            'subtle',
+            null,
+            EXTRA_ICONS[x.label] ?? null,
+          ),
         )}
-        {bead.specId !== '' && section('spec', 'Spec', <Text>{bead.specId}</Text>)}
+        {bead.specId !== '' &&
+          section('spec', 'Spec', <Text>{bead.specId}</Text>, 'subtle', null, 'spec')}
         {/* Drawn once the comments are in, so the section doesn't flash. */}
         {bead.comments !== null &&
           bead.comments.length > 0 &&
