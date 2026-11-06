@@ -764,6 +764,7 @@ export const register: Register = (on, options) => {
       spaced = false,
       rowKey = key,
       isRightAligned = parentId !== '',
+      width: number | null = null,
     ) => {
       const shortOf = (r: Ref) =>
         parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
@@ -771,7 +772,7 @@ export const register: Register = (on, options) => {
       // and titles form one straight column. A child's ID is a number such as
       // `.9` or `.11`, right-aligned so it lines up on its last digit, as in a
       // table; a full ID is left-aligned, since they all start alike.
-      const idWidth = Math.max(...refs.map(r => shortOf(r).length))
+      const idWidth = width ?? Math.max(...refs.map(r => shortOf(r).length))
       const align = isRightAligned ? 'flex-end' : 'flex-start'
       return (
         <Box key={key} flexDirection="column" gap={spaced ? 'xs' : undefined}>
@@ -832,34 +833,62 @@ export const register: Register = (on, options) => {
         const entry = all[ref]
         return entry?.kind === 'found' ? entry.bead.parent : null
       }
-      const tree = (key: string, rows: Ref[], rowNotes: Record<string, string>) => (
-        <Box key={key} flexDirection="column" gap="sm">
-          {underParents(rows, parentOf).map(group =>
-            group.parent === null ? (
-              list(`${key}-group-${group.rows[0]?.id}`, group.rows, '', rowNotes, true, key)
-            ) : (
-              <Box key={`${key}-under-${group.parent.id}`} flexDirection="column" gap="xs">
-                {/* The parent's ID first, so `.20` below reads as its child. */}
-                <Text size="caption" color="subtle">
-                  {group.parent.id}
-                  {group.parent.title ? `  ${group.parent.title}` : ''}
-                </Text>
-                <Box paddingLeft="md">
+      // A tree: each parent a full row of its own, its children indented under
+      // it by their `.n`, and the beads with no parent rows beside it. Every
+      // top-level row shares one ID column, so their glyphs line up and a bead
+      // after a group reads as the parent's sibling, not its child.
+      const tree = (key: string, rows: Ref[], rowNotes: Record<string, string>) => {
+        const groups = underParents(rows, parentOf)
+        const parentIds = new Set(groups.flatMap(g => (g.parent ? [g.parent.id] : [])))
+        // A parent that's also in the list shows once, as its group's row.
+        const shown = groups
+          .map(g => ({ ...g, rows: g.parent ? g.rows : g.rows.filter(r => !parentIds.has(r.id)) }))
+          .filter(g => g.parent || g.rows.length > 0)
+        const topIds = shown.flatMap(g => (g.parent ? [g.parent.id] : g.rows.map(r => r.id)))
+        const topWidth = Math.max(...topIds.map(ref => ref.length))
+        return (
+          <Box key={key} flexDirection="column" gap="md">
+            {shown.map(group =>
+              group.parent === null ? (
+                list(
+                  `${key}-group-${group.rows[0]?.id}`,
+                  group.rows,
+                  '',
+                  rowNotes,
+                  true,
+                  key,
+                  false,
+                  topWidth,
+                )
+              ) : (
+                <Box key={`${key}-under-${group.parent.id}`} flexDirection="column" gap="xs">
                   {list(
-                    `${key}-group-${group.parent.id}`,
-                    group.rows,
-                    group.parent.id,
+                    `${key}-parent-${group.parent.id}`,
+                    [group.parent],
+                    '',
                     rowNotes,
-                    true,
+                    false,
                     key,
                     false,
+                    topWidth,
                   )}
+                  <Box paddingLeft="lg">
+                    {list(
+                      `${key}-group-${group.parent.id}`,
+                      group.rows,
+                      group.parent.id,
+                      rowNotes,
+                      true,
+                      key,
+                      false,
+                    )}
+                  </Box>
                 </Box>
-              </Box>
-            ),
-          )}
-        </Box>
-      )
+              ),
+            )}
+          </Box>
+        )
+      }
       return (
         <Box flexDirection="column" gap="lg">
           {worked.length > 0 &&

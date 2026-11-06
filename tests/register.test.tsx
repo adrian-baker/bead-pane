@@ -117,7 +117,10 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/~home' } })
   await settle(clock)
   // demo-a1b2c sits under its parent's title; demo-g5h6.4 has none here.
-  expect(await pane.find({ type: 'Text', text: 'The epic' })).toBeTruthy()
+  // Its parent is a row of its own, with its title as a link.
+  expect(textOf(await pane.find({ key: 'mentioned-demo-p0000-title' }))).toBe(
+    '[The epic](https://beads.invalid/demo-p0000)',
+  )
   expect(await pane.find({ key: 'mentioned-demo-a1b2c' })).toBeTruthy()
   expect(await pane.find({ key: 'mentioned-demo-g5h6.4' })).toBeTruthy()
   expect(await pane.find({ key: 'worked-section' })).toBeFalsy()
