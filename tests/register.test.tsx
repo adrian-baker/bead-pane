@@ -103,7 +103,7 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   on('ui.open', () => ({ value: { isPlaced: true } }))
 
   const msg = message(
-    'See demo-a1b2c and demo-g5h6.4. In code, `bd show demo-a1b2c` and\n\n```\nbd close demo-g5h6.4\n```\n\nstay as written, as does demo-nope.',
+    'See demo-a1b2c and `demo-g5h6.4`. In code, `bd show demo-a1b2c` and\n\n```\nbd close demo-g5h6.4\n```\n\nstay as written, as does demo-nope.',
   )
   const ui = await $.ui.mount(msg)
   await settle(clock)
@@ -717,6 +717,45 @@ test('a deferred bead says when it comes back', async ($, on) => {
   await settle(clock)
   expect(await pane.find({ type: 'Text', text: /Deferred until \S+ \S+/ })).toBeTruthy()
   await pane.unmount()
+  await ui.unmount()
+})
+
+test('a resumed session links the beads an earlier one found before bd answers', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const stored = new Map<string, unknown>([
+    [
+      'project:/work/demo',
+      { setup: { kind: 'ready', prefix: 'demo', repo: null }, ids: ['demo-a1b2c'] },
+    ],
+  ])
+  on('store.get', (_, e) => ({ value: stored.get(e.key) }))
+  on('store.set', (_, e) => {
+    stored.set(e.key, e.value)
+    return { value: undefined }
+  })
+  // bd takes a second to answer anything.
+  const healthy = fakeBd({ beads: { 'demo-a1b2c': row('demo-a1b2c') } })
+  on('process.run', async (_, e) => {
+    await clock.sleep(1000)
+    return healthy(_, e)
+  })
+  on('classic.SessionStart', () => ({}))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+
+  await $.classic.SessionStart({ source: 'resume', cwd: '/work/demo' })
+  // The first draw is already linked, so it's the last.
+  const ui = await $.ui.mount(message('See demo-a1b2c.'))
+  expect(textOf(await ui.find({ type: 'Markdown' }))).toBe(
+    'See [demo-a1b2c](https://beads.invalid/demo-a1b2c).',
+  )
+  await clock.advance(2000)
+  await settle(clock)
+  expect(textOf(await ui.find({ type: 'Markdown' }))).toBe(
+    'See [demo-a1b2c](https://beads.invalid/demo-a1b2c).',
+  )
   await ui.unmount()
 })
 

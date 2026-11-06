@@ -167,6 +167,43 @@ async function runBd($: EngineInterface, bd: string, args: readonly string[]): P
   }
 }
 
+// What earlier sessions in this folder learned, kept in `$.store` so a resumed
+// session's messages draw with their links the first time, rather than drawn
+// by the engine and then again by the mod, which spaces text differently: the
+// setup bd gave and the IDs it found. Read at the session's start, one local
+// read; written after lookups, off the draw.
+let projectKey: string | null = null
+let remembered = new Set<string>()
+const REMEMBERED_MAX = 2000
+type Remembered = { setup: Setup | null; ids: string[] }
+const storeKey = (folder: string) => `project:${folder}`
+
+async function recall($: EngineInterface, folder: string): Promise<void> {
+  projectKey = folder
+  const stored = (await $.store.get(storeKey(folder))) as Partial<Remembered> | undefined
+  if (Array.isArray(stored?.ids)) {
+    remembered = new Set(stored.ids.filter((id): id is string => typeof id === 'string'))
+  }
+  const was = stored?.setup
+  if (was?.kind === 'ready' && typeof was.prefix === 'string' && (await read($, setup)) === null) {
+    await update($, setup, () => was)
+  }
+}
+
+async function remember(
+  $: EngineInterface,
+  change: { setup?: Setup; found?: readonly string[] },
+): Promise<void> {
+  if (projectKey === null) return
+  const key = storeKey(projectKey)
+  const stored = ((await $.store.get(key)) ?? {}) as Partial<Remembered>
+  const ids = [
+    ...new Set([...(change.found ?? []), ...(Array.isArray(stored.ids) ? stored.ids : [])]),
+  ].slice(0, REMEMBERED_MAX)
+  for (const id of change.found ?? []) remembered.add(id)
+  await $.store.set(key, { setup: change.setup ?? stored.setup ?? null, ids })
+}
+
 // The project's ID prefix, asked of bd once per load. A reload, such as the
 // one after the person sets the bd path, asks again, and so does `/beads`
 // while the answer is a problem.
@@ -183,6 +220,9 @@ function setupOf($: EngineInterface, bd: string): Promise<Setup> {
           ? { kind: 'ready', prefix, repo: await repoOf($) }
           : { kind: 'no-database', detail: (ran.result.stderr || ran.result.stdout).trim() }
     await update($, setup, () => found)
+    if (found.kind === 'ready') {
+      await remember($, { setup: found }).catch(err => logFailure($, 'remembering the setup', err))
+    }
     return found
   })()
   return asking
@@ -312,6 +352,10 @@ async function lookUp($: EngineInterface, bd: string): Promise<void> {
   }
   await update($, beads, all => ({ ...all, ...lookups }))
   for (const id of ids) commentsPending.delete(id)
+  const found = Object.entries(lookups).flatMap(([id, l]) => (l.kind === 'found' ? [id] : []))
+  if (found.length > 0) {
+    await remember($, { found }).catch(err => logFailure($, 'remembering beads', err))
+  }
 }
 
 // Adds the open beads the beads actor holds, once per load: a bead this
@@ -512,6 +556,9 @@ export const register: Register = (on, options) => {
   // session shows at its next start: reading it on each prompt would add
   // work to every prompt. The lookup runs after the event.
   on('classic.SessionStart', async ($, e, next) => {
+    await recall($, e.cwd).catch(err => logFailure($, 'recalling the project', err))
+    // bd is asked again after the draw, in case the setup changed.
+    ensureSetup($, bd)
     const title = e.session_title
     if (title)
       $.clock.after(0, () => {
@@ -575,14 +622,17 @@ export const register: Register = (on, options) => {
       ids.filter(id => !(id in known)),
     )
 
-    // Only a bead the lookup found becomes a link; the rest stays text.
-    const links = ids.filter(id => known[id]?.kind === 'found')
+    // Only a bead the lookup found becomes a link, or, until it's asked, one an
+    // earlier session in this folder found; the rest stays text.
+    const isBead = (id: string) =>
+      known[id]?.kind === 'found' || (!(id in known) && remembered.has(id))
+    const links = ids.filter(isBead)
     if (links.length === 0) return next(e)
     markMentioned($, links)
 
     const { Markdown } = $.ui.resolve(e)
     const text = linkIds(e.props.text, found.prefix, id =>
-      known[id]?.kind === 'found' ? `[${id}](${BASE}${id})` : null,
+      isBead(id) ? `[${id}](${BASE}${id})` : null,
     )
 
     return (

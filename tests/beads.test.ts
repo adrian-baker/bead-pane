@@ -26,10 +26,15 @@ import { row } from './fake-bd'
 
 const ref = (id: string, status = 'open') => ({ id, title: id, status })
 
-test('IDs in code are left alone, in spans of any length and in fences', () => {
-  const text = 'demo-a1b2 `demo-c3d4` ``x `demo-e5f6` y``\n```\ndemo-g7h8\n```\n~~~\ndemo-i9j0'
-  expect(idsIn(text, 'demo')).toEqual(['demo-a1b2'])
-  expect(linkIds(text, 'demo', id => `<${id}>`)).toBe(text.replace('demo-a1b2', '<demo-a1b2>'))
+test('IDs in code are left alone, but for a span that holds one alone', () => {
+  const text =
+    'demo-a1b2 `demo-c3d4` `bd show demo-k1k2` ``x `demo-e5f6` y``\n```\ndemo-g7h8\n```\n~~~\ndemo-i9j0'
+  expect(idsIn(text, 'demo')).toEqual(['demo-a1b2', 'demo-c3d4'])
+  expect(linkIds(text, 'demo', id => `<${id}>`)).toBe(
+    text.replace('demo-a1b2', '<demo-a1b2>').replace('`demo-c3d4`', '<demo-c3d4>'),
+  )
+  // An ID bd didn't find keeps its backticks.
+  expect(linkIds('`demo-c3d4`', 'demo', () => null)).toBe('`demo-c3d4`')
 })
 
 test('a prefix with regex characters matches only itself', () => {

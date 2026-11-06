@@ -39,33 +39,66 @@ export const parsePrefix = (stdout: string): string | null => {
 // unclosed fence runs to the end, as Markdown draws it.
 const CODE = /(```|~~~)[\s\S]*?(?:\1|$(?![\s\S]))|(`+)[\s\S]*?\2(?!`)/g
 
-// Applies `fn` to the text outside code, which Markdown draws literally.
-export const outsideCode = (text: string, fn: (prose: string) => string): string => {
+// Applies `fn` to the text outside code, which Markdown draws literally, and
+// `code` to each code block and span, which it keeps by default.
+export const outsideCode = (
+  text: string,
+  fn: (prose: string) => string,
+  code: (span: string) => string = span => span,
+): string => {
   let out = ''
   let at = 0
   for (const m of text.matchAll(CODE)) {
-    out += fn(text.slice(at, m.index)) + m[0]
+    out += fn(text.slice(at, m.index)) + code(m[0])
     at = m.index + m[0].length
   }
   return out + fn(text.slice(at))
 }
 
-// The distinct bead IDs in the text outside code.
+// The ID in an inline code span that holds one and nothing else, as a reply
+// writes `demo-g5h6`; null for any other code, such as `bd show demo-g5h6`.
+const soleId = (span: string, prefix: string): string | null => {
+  // On one line, so a fenced block never counts.
+  const inner = span.match(/^(`+) *([^`\n]*?) *\1$/)?.[2] ?? ''
+  const ids = inner.match(idPattern(prefix))
+  return ids?.length === 1 && ids[0] === inner ? inner : null
+}
+
+// The distinct bead IDs in the text outside code, and in code that holds an
+// ID alone.
 export const idsIn = (text: string, prefix: string): string[] => {
   const found = new Set<string>()
-  outsideCode(text, prose => {
-    for (const m of prose.matchAll(idPattern(prefix))) found.add(m[0])
-    return prose
-  })
+  outsideCode(
+    text,
+    prose => {
+      for (const m of prose.matchAll(idPattern(prefix))) found.add(m[0])
+      return prose
+    },
+    span => {
+      const id = soleId(span, prefix)
+      if (id) found.add(id)
+      return span
+    },
+  )
   return [...found]
 }
 
-// Rewrites each ID outside code that `link` answers for.
+// Rewrites each ID that `link` answers for, outside code and as the whole of
+// a code span. A span's link drops the backticks: a desktop draws code in a
+// link as plain text, so it reads as the other IDs do.
 export const linkIds = (
   text: string,
   prefix: string,
   link: (id: string) => string | null,
-): string => outsideCode(text, prose => prose.replace(idPattern(prefix), id => link(id) ?? id))
+): string =>
+  outsideCode(
+    text,
+    prose => prose.replace(idPattern(prefix), id => link(id) ?? id),
+    span => {
+      const id = soleId(span, prefix)
+      return (id && link(id)) ?? span
+    },
+  )
 
 type Row = Record<string, unknown>
 

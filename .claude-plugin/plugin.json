@@ -1,6 +1,6 @@
 {
   "name": "bead-pane",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Click a beads issue ID in Claude's replies to open the bead in a side pane: status, children, blockers, notes",
   "author": { "name": "Adrian Baker", "url": "https://github.com/adrian-baker" },
   "homepage": "https://github.com/adrian-baker/bead-pane",
