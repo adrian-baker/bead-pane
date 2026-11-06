@@ -765,6 +765,7 @@ export const register: Register = (on, options) => {
       rowKey = key,
       isRightAligned = parentId !== '',
       width: number | null = null,
+      isBranch = false,
     ) => {
       const shortOf = (r: Ref) =>
         parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
@@ -772,14 +773,19 @@ export const register: Register = (on, options) => {
       // and titles form one straight column. A child's ID is a number such as
       // `.9` or `.11`, right-aligned so it lines up on its last digit, as in a
       // table; a full ID is left-aligned, since they all start alike.
-      const idWidth = width ?? Math.max(...refs.map(r => shortOf(r).length))
+      const idWidth = (width ?? Math.max(...refs.map(r => shortOf(r).length))) + (isBranch ? 2 : 0)
       const align = isRightAligned ? 'flex-end' : 'flex-start'
       return (
         <Box key={key} flexDirection="column" gap={spaced ? 'xs' : undefined}>
-          {refs.map(r => (
+          {refs.map((r, i) => (
             <Box key={`${rowKey}-${r.id}`} gap="xs" alignItems="flex-start">
               <Box width={idWidth} flexShrink={0} justifyContent={align}>
-                <Text color="subtle">{shortOf(r)}</Text>
+                {/* Monospaced, so each character fills one of the cells the
+                    column is measured in and the column fits its IDs. */}
+                <Text color="subtle" mono>
+                  {isBranch ? (i === refs.length - 1 ? '└ ' : '├ ') : ''}
+                  {shortOf(r)}
+                </Text>
               </Box>
               <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
                 {GLYPH[r.status] ?? '○'}
@@ -878,7 +884,7 @@ export const register: Register = (on, options) => {
                     false,
                     topWidth,
                   )}
-                  <Box paddingLeft="lg">
+                  <Box paddingLeft="sm">
                     {list(
                       `${key}-group-${group.parent.id}`,
                       group.rows,
@@ -887,6 +893,8 @@ export const register: Register = (on, options) => {
                       true,
                       key,
                       false,
+                      null,
+                      true,
                     )}
                   </Box>
                 </Box>
