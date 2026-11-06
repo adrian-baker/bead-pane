@@ -44,14 +44,20 @@ const CONFIGURE = '/plugin configure bead-pane@bead-pane'
 // A tree branch, the height of one line of text: the vertical line runs
 // through the row and turns into it, ending in a rounded elbow on the last.
 const BRANCH_WIDTH = 14
-const BRANCH_HEIGHT = 22
+// A body line's height on a desktop: taller, a child's row would sit
+// further from the next than its parent does from it.
+const BRANCH_HEIGHT = 21
 // The cells of an ID column the branch takes, at about 8px a cell.
 const BRANCH_CELLS = 2
 const BRANCH_COLOUR = '#5a5a5a'
 const branchSvg = (isLast: boolean): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${BRANCH_WIDTH} ${BRANCH_HEIGHT}" ` +
   `fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5" stroke-linecap="round">` +
-  `<path d="${isLast ? 'M6 0V7Q6 11 10 11H14' : 'M6 0V22M6 11H14'}"/></svg>`
+  `<path d="${
+    isLast
+      ? `M6 0V${BRANCH_HEIGHT / 2 - 4}Q6 ${BRANCH_HEIGHT / 2} 10 ${BRANCH_HEIGHT / 2}H14`
+      : `M6 0V${BRANCH_HEIGHT}M6 ${BRANCH_HEIGHT / 2}H14`
+  }"/></svg>`
 
 const EXTRA_ICONS: Record<string, IconName> = {
   Notes: 'notes',
