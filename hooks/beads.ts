@@ -408,6 +408,21 @@ export const datedEntries = (text: string): { when: string; text: string }[] | n
     : null
 }
 
+// A dated note's date as the pane shows other times: `5h ago` for one with a
+// time, read as UTC as bd writes it; `6 Nov` for a date alone, which has no
+// time to count from.
+export const noteWhen = (when: string, nowMs: number): string => {
+  const [date = '', time] = when.split(/[ T]/)
+  if (time) {
+    const at = Date.parse(`${date}T${time.replace(/Z$/, '')}Z`)
+    return Number.isNaN(at) ? when : ago(at, nowMs)
+  }
+  const [y, m, d] = date.split('-').map(Number)
+  return y && m && d
+    ? new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+    : when
+}
+
 // Small outline icons for the pane's section headings, 16 units square, in a
 // grey that reads on a light or a dark pane: an SVG draws as an image, so it
 // can't take the theme's colours.

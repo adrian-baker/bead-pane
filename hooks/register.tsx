@@ -13,6 +13,7 @@ import {
   iconSvg,
   keepLineBreaks,
   linkGitHub,
+  noteWhen,
   parseGitHubRepo,
   refLabel,
   refUrl,
@@ -39,6 +40,18 @@ const BASE = 'https://beads.invalid/'
 const PANE = 'bead'
 const TIMEOUT_MS = 10000
 const CONFIGURE = '/plugin configure bead-pane@bead-pane'
+// A tree branch, the height of one line of text: the vertical line runs
+// through the row and turns into it, ending in a rounded elbow on the last.
+const BRANCH_WIDTH = 14
+const BRANCH_HEIGHT = 22
+const BRANCH_COLOUR = '#5a5a5a'
+const branchSvg = (isLast: boolean): string =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${BRANCH_WIDTH} ${BRANCH_HEIGHT}" ` +
+  `fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5" stroke-linecap="round">` +
+  `<path d="${isLast ? 'M1 0V7Q1 11 5 11H13' : 'M1 0V22M1 11H13'}"/></svg>`
+
+const CHIP_ON = '#8080803d'
+const CHIP_HOVER = '#80808021'
 const EXTRA_ICONS: Record<string, IconName> = {
   Notes: 'notes',
   Design: 'design',
@@ -660,8 +673,9 @@ export const register: Register = (on, options) => {
       )
     }
     const link = (to: string, label = to) => `[${label}](${BASE}${to})`
-    // An ID in prose keeps its hyphen from breaking the line (`demo-` /
-    // `g5h6`): the label gets a non-breaking hyphen, the link keeps the real ID.
+    // An ID in prose is monospaced, as in the ID columns, and keeps its hyphen
+    // from breaking the line (`demo-` / `g5h6`): the label gets a non-breaking
+    // hyphen, the link keeps the real ID.
     const repo = found.repo
     // The files the shown bead links to that aren't in the session's folder,
     // such as a design still on an open pull request's branch.
@@ -687,7 +701,7 @@ export const register: Register = (on, options) => {
       fileExists.get(path) === false ? (fileElsewhere.get(path) ?? null) : undefined
     const linkify = (text: string) => {
       const withBeads = linkIds(relinkFiles(text, fileTarget), prefix, ref =>
-        link(ref, ref.replace(/-/g, '‑')),
+        link(ref, `\`${ref.replace(/-/g, '‑')}\``),
       )
       return keepLineBreaks(repo ? linkGitHub(withBeads, repo) : withBeads)
     }
@@ -702,7 +716,7 @@ export const register: Register = (on, options) => {
           {entries.map((entry, i) => (
             <Box key={`note-${i}`} flexDirection="column">
               <Text size="caption" color="subtle">
-                {entry.when}
+                {noteWhen(entry.when, nowMs)}
               </Text>
               {md(`note-${i}-text`, linkify(entry.text))}
             </Box>
@@ -769,6 +783,7 @@ export const register: Register = (on, options) => {
       rowKey = key,
       isRightAligned = parentId !== '',
       width: number | null = null,
+      isBranch = false,
     ) => {
       const shortOf = (r: Ref) =>
         parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
@@ -783,9 +798,41 @@ export const register: Register = (on, options) => {
       const hasPriority = refs.some(r => r.priority !== undefined)
       const align = isRightAligned ? 'flex-end' : 'flex-start'
       return (
-        <Box key={key} flexDirection="column" gap={spaced ? 'xs' : undefined}>
-          {refs.map(r => (
-            <Box key={`${rowKey}-${r.id}`} gap="xs" alignItems="flex-start">
+        <Box key={key} flexDirection="column" gap={spaced && !isBranch ? 'xs' : undefined}>
+          {refs.map((r, i) => (
+            <Box
+              key={`${rowKey}-${r.id}`}
+              gap="xs"
+              alignItems={isBranch && Svg ? 'stretch' : 'flex-start'}
+            >
+              {/* A child's line back to its parent: drawn where the surface
+                  draws SVG, as box characters in the terminal. The branch
+                  turns into the row's first line; below it, a zero-width
+                  bordered Box carries the line down the rest of the row
+                  however far the title wraps, and the rows touch, so the
+                  line runs unbroken to the next child. */}
+              {isBranch &&
+                (Svg ? (
+                  <Box flexDirection="column" flexShrink={0}>
+                    <Svg
+                      key={`${rowKey}-${r.id}-branch`}
+                      alt=""
+                      width={BRANCH_WIDTH}
+                      height={BRANCH_HEIGHT}
+                      source={branchSvg(i === refs.length - 1)}
+                    />
+                    {i < refs.length - 1 && (
+                      <Box
+                        flexGrow={1}
+                        width={0}
+                        borderStyle="single"
+                        borderColor={BRANCH_COLOUR}
+                      />
+                    )}
+                  </Box>
+                ) : (
+                  <Text color="subtle">{i === refs.length - 1 ? '└' : '├'}</Text>
+                ))}
               <Box width={idWidth} flexShrink={0} justifyContent={align}>
                 {/* Monospaced, so each character fills one of the cells the
                     column is measured in and the column fits its IDs. */}
@@ -796,12 +843,12 @@ export const register: Register = (on, options) => {
               <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
                 {GLYPH[r.status] ?? '○'}
               </Text>
-              {/* An open bead's priority, read with its title; a closed one's
-                  no longer matters. */}
+              {/* The bead's priority, read with its title; dim once closed,
+                  as its glyph is. */}
               {hasPriority && (
                 <Box width={2} flexShrink={0}>
-                  {r.priority !== undefined && r.status !== 'closed' && (
-                    <Text size="footnote" color={priorityColor(r.priority)} mono>
+                  {r.priority !== undefined && (
+                    <Text color={priorityColor(r.priority)} dimColor={r.status === 'closed'}>
                       P{r.priority}
                     </Text>
                   )}
@@ -910,7 +957,7 @@ export const register: Register = (on, options) => {
                   topWidth,
                 )
               ) : (
-                <Box key={`${key}-under-${group.parent.id}`} flexDirection="column" gap="xs">
+                <Box key={`${key}-under-${group.parent.id}`} flexDirection="column">
                   {list(
                     `${key}-parent-${group.parent.id}`,
                     [group.parent],
@@ -921,8 +968,8 @@ export const register: Register = (on, options) => {
                     false,
                     topWidth,
                   )}
-                  {/* The children, indented to start under the parent's glyph:
-                      an outline, which the indent alone makes plain. */}
+                  {/* The children hang off a line drawn down from the parent's
+                      glyph, with their IDs left-aligned after the branch. */}
                   <Box gap="xs">
                     <Box width={topWidth} flexShrink={0} />
                     <Box flexGrow={1} flexShrink={1}>
@@ -931,8 +978,11 @@ export const register: Register = (on, options) => {
                         group.rows,
                         group.parent.id,
                         rowNotes,
-                        true,
+                        false,
                         key,
+                        true,
+                        null,
+                        true,
                       )}
                     </Box>
                   </Box>
@@ -986,7 +1036,9 @@ export const register: Register = (on, options) => {
     // this one, unlinked.
     const chain = [...above.map(r => r.id), id]
     const trail = trailLabels(chain)
-      .map((label, i) => (i === chain.length - 1 ? label : link(chain[i] ?? '', label)))
+      .map((label, i) =>
+        i === chain.length - 1 ? `\`${label}\`` : link(chain[i] ?? '', `\`${label}\``),
+      )
       .join(' › ')
     // A wait longer than OPENING_MS names the bead being opened in the
     // breadcrumb, so a slow click still shows. Nothing below it moves.
@@ -997,14 +1049,13 @@ export const register: Register = (on, options) => {
     }
     const isOpeningShown = waiting !== null && nowMs - waiting.sinceMs >= OPENING_MS
     const crumbs = isOpeningShown
-      ? `${link('~home', '≡')} › ${wanted} · *opening…*`
+      ? `${link('~home', '≡')} › \`${wanted}\` · *opening…*`
       : `${link('~home', '≡')} › ${trail}`
 
     const status = statusOf(bead.status)
     const refHref = bead.externalRef === '' ? null : refUrl(bead.externalRef, repo)
 
-    const openBlockers = bead.blockedBy.filter(b => b.status !== 'closed')
-    const doneBlockers = bead.blockedBy.length - openBlockers.length
+    const isBlocked = bead.blockedBy.some(b => b.status !== 'closed')
 
     // Children whose IDs nest under this bead's come first, in ID order, so
     // they set the ID column; a child filed elsewhere comes after them.
@@ -1051,10 +1102,10 @@ export const register: Register = (on, options) => {
               {counts.map(([st, n]) => {
                 const label = `${n} ${statusOf(st).label.toLowerCase()}`
                 const isOn = st === onlyStatus
-                // A chip per status: outlined faintly when off and in the
-                // status's colour when on, so turning one on moves nothing.
-                // The terminal would spend three rows on an outline, so it
-                // brackets the one on.
+                // A chip per status at the text's own height: a soft grey
+                // pill marks the one on, and shows faintly under the pointer
+                // on the others. The grey is translucent, so it reads on a
+                // light or a dark pane. The terminal brackets the one on.
                 const isTerminal = e.surface === 'terminal'
                 return (
                   <Box
@@ -1064,10 +1115,10 @@ export const register: Register = (on, options) => {
                     {...(isTerminal
                       ? {}
                       : {
-                          borderStyle: 'round',
-                          borderColor: isOn ? statusOf(st).color : 'subtle',
-                          borderDimColor: !isOn,
                           paddingX: 'xs' as const,
+                          ...(isOn
+                            ? { backgroundColor: CHIP_ON }
+                            : { hover: { backgroundColor: CHIP_HOVER } }),
                         })}
                   >
                     <Text size="footnote" color={statusOf(st).color}>
@@ -1147,18 +1198,15 @@ export const register: Register = (on, options) => {
         {/* The bead's main text, under its title as an issue's body is, so it
             needs no heading of its own. */}
         {bead.description.trim() !== '' && md('desc', linkify(bead.description))}
-        {openBlockers.length > 0 &&
-          section('blockers', 'Blocked by', list('blocker-list', openBlockers), 'error')}
-        {openBlockers.length === 0 && doneBlockers > 0 && (
-          <Text size="footnote" color="subtle">
-            <Text color="success" dimColor>
-              {GLYPH.closed}{' '}
-            </Text>
-            {doneBlockers === 1
-              ? 'Its blocker is closed'
-              : `All ${doneBlockers} blockers are closed`}
-          </Text>
-        )}
+        {/* Every blocker, closed ones too, so it's plain what the bead waited
+            on: under a red heading while any is open, a grey one after. */}
+        {bead.blockedBy.length > 0 &&
+          section(
+            'blockers',
+            isBlocked ? 'Blocked by' : 'Was blocked by',
+            list('blocker-list', bead.blockedBy),
+            isBlocked ? 'error' : 'subtle',
+          )}
         {isEpic && children}
         {bead.status === 'closed' &&
           bead.closeReason.trim() !== '' &&

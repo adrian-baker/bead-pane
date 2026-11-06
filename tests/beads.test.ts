@@ -8,6 +8,7 @@ import {
   fileLinks,
   keepLineBreaks,
   linkGitHub,
+  noteWhen,
   parseGitHubRepo,
   refLabel,
   relinkFiles,
@@ -193,5 +194,13 @@ test('file links are found outside code and rewritten by where the file is', () 
   expect(relinkFiles(text, path => where[path])).toBe(
     'See [the approach](https://gh.test/approach.md), the code, [GitHub](https://x.test) ' +
       'and `[not this](docs/b.md)`.',
+  )
+})
+
+test('a note with a time reads as time ago, a date alone as the date', () => {
+  const now = Date.parse('2026-11-06T04:28:00Z')
+  expect(noteWhen('2026-11-05 23:28Z', now)).toBe('5h ago')
+  expect(noteWhen('2026-11-06', now)).toBe(
+    new Date(2026, 10, 6).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
   )
 })
