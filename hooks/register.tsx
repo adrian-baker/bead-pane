@@ -1,21 +1,42 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, ProcessRunResult, Register, RenderChildren } from 'claude-code'
 
-import type { Bead, Ref } from '../types'
+import type { Lookup, Ref, Setup } from '../types'
+import {
+  ago,
+  barRuns,
+  changedBy,
+  idsIn,
+  linkIds,
+  countByStatus,
+  parseAssigned,
+  parseChildren,
+  parsePrefix,
+  parseShown,
+  summarised,
+  trailLabels,
+} from './beads'
 
-// A bead ID is `fp-` and three to six base-36 characters, plus `.n` for each
-// level of child (`fp-g5h6.4`, `fp-abcd.1.2`). An ID inside a link, a code
-// span or a path is left alone.
-const ID = /(?<![\w[`/.-])fp-[a-z0-9]{3,6}(?:\.\d+)*(?![\w\]`/-])/g
-const BD = '/opt/homebrew/bin/bd'
+// Links the mod draws point here, a host that can't resolve, and a press on
+// one is answered by the mod. `~home` and `~all` are the pane's own verbs.
 const BASE = 'https://beads.invalid/'
 const PANE = 'bead'
+const TIMEOUT_MS = 10000
+const CONFIGURE = '/plugin configure bead-pane@bead-pane'
 
-// null: asked, and no such bead. Change the tag when Bead's fields change.
-const beads = atom({ plugin: 'bead-pane', key: 'beads' } as const, {}, {
-  shape: 'beads-6',
+// null: not asked yet this session.
+const setup = atom({ plugin: 'bead-pane', key: 'setup' } as const, null, {
+  shape: 'setup-1',
 })
-// The bead the pane shows.
+// Change the tag when Lookup's or Bead's fields change.
+const beads = atom(
+  { plugin: 'bead-pane', key: 'beads' } as const,
+  {},
+  {
+    shape: 'beads-7',
+  },
+)
+// The bead the pane shows; null for the session's list.
 const selected = atom({ plugin: 'bead-pane', key: 'selected' } as const, null, {
   shape: 'selected-1',
 })
@@ -26,11 +47,14 @@ const expanded = atom({ plugin: 'bead-pane', key: 'expanded' } as const, null, {
   shape: 'expanded-1',
 })
 
-// The beads this session has touched, by ID: what it last did to each and
-// when. Session state, so a resume keeps it and `/clear` starts it again.
-const touched = atom({ plugin: 'bead-pane', key: 'touched' } as const, {}, {
-  shape: 'touched-1',
-})
+// The beads this session has touched, by ID: what it last did to each and when.
+const touched = atom(
+  { plugin: 'bead-pane', key: 'touched' } as const,
+  {},
+  {
+    shape: 'touched-2',
+  },
+)
 
 // One glyph per status, from empty to full as work moves on, drawn in the
 // status colour. The header and every list use the same glyph. Closed's green
@@ -57,211 +81,247 @@ const statusOf = (status: string) =>
   }
 const priorityColor = (p: number) => (p <= 1 ? 'error' : p === 2 ? 'warning' : 'subtle')
 
-const ago = (iso: string, now: number): string => {
-  const then = Date.parse(iso)
-  if (Number.isNaN(then)) return '-'
-  const mins = Math.max(0, Math.round((now - then) / 60000))
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  if (mins < 2880) return `${Math.round(mins / 60)}h ago`
-  if (mins < 86400) return `${Math.round(mins / 1440)}d ago`
-  return new Date(then).toLocaleDateString()
+const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err))
+
+// For work nothing awaits, such as a timer's or a press's, whose failure
+// would otherwise go unseen.
+function logFailure($: EngineInterface, what: string, err: unknown): void {
+  $.ui.log(`bead-pane: ${what} failed: ${messageOf(err)}`, { to: 'debug' })
 }
 
-// `fp-g5h6.10` after `fp-g5h6.9`: the numeric parts compare as numbers.
-const byId = (a: Ref, b: Ref): number => {
-  const pa = a.id.split('.')
-  const pb = b.id.split('.')
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const x = pa[i] ?? ''
-    const y = pb[i] ?? ''
-    const n = Number(x) - Number(y)
-    if (x !== y) return Number.isNaN(n) || n === 0 ? x.localeCompare(y) : n
+type Ran = { kind: 'ran'; result: ProcessRunResult } | { kind: 'failed'; detail: string }
+
+// Runs bd. `failed` when it can't start or doesn't answer in time.
+async function runBd($: EngineInterface, bd: string, args: readonly string[]): Promise<Ran> {
+  try {
+    return { kind: 'ran', result: await $.process.run([bd, ...args], { timeoutMs: TIMEOUT_MS }) }
+  } catch (err) {
+    return { kind: 'failed', detail: messageOf(err) }
   }
-  return 0
 }
 
-// Bead IDs already asked about this load; a reload asks again, once each.
-const asked = new Set<string>()
+// The project's ID prefix, asked of bd once per load. A reload, such as the
+// one after the person sets the bd path, asks again, and so does `/beads`
+// while the answer is a problem.
+let asking: Promise<Setup> | null = null
+function setupOf($: EngineInterface, bd: string): Promise<Setup> {
+  asking ??= (async () => {
+    const ran = await runBd($, bd, ['config', 'get', 'issue_prefix'])
+    const found: Setup =
+      ran.kind === 'failed'
+        ? { kind: 'no-bd', bd, detail: ran.detail }
+        : ran.result.exitCode === 0 && parsePrefix(ran.result.stdout) !== null
+          ? { kind: 'ready', prefix: ran.result.stdout.trim() }
+          : { kind: 'no-database', detail: (ran.result.stderr || ran.result.stdout).trim() }
+    await update($, setup, () => found)
+    return found
+  })()
+  return asking
+}
 
-// Looks a bead up after the current draw and caches it, so a draw never waits
-// on `bd`. Writing the atom redraws everything that reads it.
-function ensure($: EngineInterface, id: string): void {
-  if (asked.has(id)) return
-  asked.add(id)
-  $.clock.after(0, async () => {
-    const ran = await $.process.run([BD, 'show', id, '--json'], {
-      timeoutMs: 10000,
-    })
-    let bead: Bead | null = null
-    if (ran.exitCode === 0) {
-      try {
-        const row = JSON.parse(ran.stdout)[0]
-        const deps: { id: string; title: string; status: string; dependency_type?: string }[] =
-          row.dependencies ?? []
-        bead = {
-          status: String(row.status ?? '?'),
-          title: String(row.title ?? ''),
-          description: String(row.description ?? ''),
-          priority: typeof row.priority === 'number' ? row.priority : null,
-          type: String(row.issue_type ?? ''),
-          assignee: String(row.assignee ?? ''),
-          created: String(row.created_at ?? ''),
-          updated: String(row.updated_at ?? ''),
-          extras: (
-            [
-              ['Notes', row.notes],
-              ['Design', row.design],
-              ['Acceptance criteria', row.acceptance_criteria],
-            ] as const
-          )
-            .filter(([, text]) => typeof text === 'string' && text.trim() !== '')
-            .map(([label, text]) => ({ label, text: String(text) })),
-          blockedBy: deps
-            .filter(dep => dep.dependency_type === 'blocks')
-            .map(dep => ({
-              id: String(dep.id),
-              title: String(dep.title ?? ''),
-              status: String(dep.status ?? ''),
-            })),
-          parent: null,
-          children: [],
-          closeReason: String(row.close_reason ?? ''),
-        }
-        const up = deps.find(dep => dep.dependency_type === 'parent-child' || dep.id === row.parent)
-        if (up) {
-          bead.parent = {
-            id: String(up.id),
-            title: String(up.title ?? ''),
-            status: String(up.status ?? ''),
-          }
-        }
-        // Only a bead something depends on can have children: skip the call otherwise.
-        if (Number(row.dependent_count ?? 0) > 0) {
-          const kids = await $.process.run([BD, 'children', id, '--json'], {
-            timeoutMs: 10000,
-          })
-          if (kids.exitCode === 0) {
-            const rows: { id: string; title: string; status: string }[] = JSON.parse(kids.stdout)
-            bead.children = rows
-              .map(k => ({ id: String(k.id), title: String(k.title ?? ''), status: String(k.status ?? '') }))
-              .sort(byId)
-          }
-        }
-      } catch {
-        bead = null
-      }
-    }
-    await update($, beads, all => ({ ...all, [id]: bead }))
+// From a draw: asks after it, so the draw doesn't wait on bd.
+function ensureSetup($: EngineInterface, bd: string): void {
+  if (asking) return
+  $.clock.after(0, () => {
+    setupOf($, bd).catch(err => logFailure($, 'asking bd for the prefix', err))
   })
 }
 
-// What a `bd` command did, by its subcommand; read-only ones are absent.
-const VERB: Record<string, string> = {
-  create: 'created',
-  close: 'closed',
-  reopen: 'reopened',
-  unclaim: 'unclaimed',
-  comment: 'commented',
-  comments: 'commented',
-  dep: 'linked',
-  update: 'updated',
+// Bead IDs asked about this load. Answers stay in `beads` across a reload,
+// so a draw asks only about an ID it has no answer for. A bd command that
+// changes a bead, or opening the bead in the pane, asks again.
+const asked = new Set<string>()
+let pending: string[] = []
+
+// Looks beads up after the current draw. Every ID asked before the lookup
+// starts goes in one `bd show`.
+function ensure($: EngineInterface, bd: string, ids: readonly string[]): void {
+  const fresh = ids.filter(id => !asked.has(id))
+  if (fresh.length === 0) return
+  for (const id of fresh) asked.add(id)
+  const isScheduled = pending.length > 0
+  pending = [...pending, ...fresh]
+  if (isScheduled) return
+  $.clock.after(0, () => {
+    lookUp($, bd).catch(err => logFailure($, 'looking beads up', err))
+  })
 }
 
-// The beads one shell command changed, and how. `bd update <id> --claim` is a
-// claim; `bd create` names its new bead only in what it prints.
-const changedBy = (command: string, stdout: string): [string, string][] => {
-  const found: [string, string][] = []
-  for (const part of command.split(/&&|\|\||;|\n|\|/)) {
-    const m = part.match(/(?:^|\s|\/)bd\s+([a-z]+)(.*)$/)
-    if (!m) continue
-    const [, sub, rest] = m
-    let how = VERB[sub]
-    if (!how) continue
-    if (sub === 'comments' && !/^\s+add\b/.test(rest)) continue
-    if (sub === 'update' && /--claim\b/.test(rest)) how = 'claimed'
-    const ids = sub === 'create' ? (stdout.match(ID) ?? []).slice(0, 1) : (rest.match(ID) ?? [])
-    for (const ref of ids) found.push([ref, how])
+function refresh($: EngineInterface, bd: string, ids: readonly string[]): void {
+  for (const id of ids) asked.delete(id)
+  ensure($, bd, ids)
+}
+
+// One `bd show` for the pending IDs, then `bd children` for each bead that can
+// have children, one at a time. Writing the atom redraws what reads it.
+async function lookUp($: EngineInterface, bd: string): Promise<void> {
+  const ids = pending
+  pending = []
+  const shown = await runBd($, bd, ['show', ...ids, '--json'])
+  const { lookups, withChildren } =
+    shown.kind === 'ran'
+      ? parseShown(ids, shown.result)
+      : {
+          lookups: Object.fromEntries(
+            ids.map((id): [string, Lookup] => [id, { kind: 'failed', detail: shown.detail }]),
+          ),
+          withChildren: [],
+        }
+  for (const id of withChildren) {
+    const entry = lookups[id]
+    if (entry?.kind !== 'found') continue
+    const kids = await runBd($, bd, ['children', id, '--json'])
+    lookups[id] =
+      kids.kind === 'ran' && kids.result.exitCode === 0
+        ? { kind: 'found', bead: { ...entry.bead, children: parseChildren(kids.result.stdout) } }
+        : {
+            kind: 'failed',
+            detail:
+              kids.kind === 'failed'
+                ? kids.detail
+                : kids.result.stderr.trim() || 'bd children failed',
+          }
   }
-  return found
+  await update($, beads, all => ({ ...all, ...lookups }))
 }
 
-// Adds what the beads actor has assigned to it, once per load: a bead this
+// Adds the open beads the beads actor holds, once per load: a bead this
 // session claimed before a reload, or in a turn whose command the mod missed.
 let isActorAsked = false
-function askActor($: EngineInterface): void {
+function askActor($: EngineInterface, bd: string): void {
   if (isActorAsked) return
   isActorAsked = true
-  $.clock.after(0, async () => {
-    const actor = await $.env.get('BEADS_ACTOR')
-    if (!actor) return
-    const ran = await $.process.run([BD, 'list', '--assignee', actor, '--all', '--json'], {
-      timeoutMs: 10000,
-    })
-    if (ran.exitCode !== 0) return
-    let rows: { id: string; updated_at?: string }[] = []
-    try {
-      rows = JSON.parse(ran.stdout) ?? []
-    } catch {
-      return
-    }
-    await update($, touched, all => {
-      const merged = { ...all }
-      for (const r of rows) {
-        if (!merged[r.id]) merged[r.id] = { how: 'assigned', at: Date.parse(r.updated_at ?? '') || 0 }
-      }
-      return merged
-    })
+  $.clock.after(0, () => {
+    addAssigned($, bd).catch(err => logFailure($, "listing the actor's beads", err))
   })
 }
 
-export const register: Register = on => {
+async function addAssigned($: EngineInterface, bd: string): Promise<void> {
+  const actor = await $.env.get('BEADS_ACTOR')
+  if (!actor) return
+  const ran = await runBd($, bd, [
+    'list',
+    '--assignee',
+    actor,
+    '--status',
+    'open,in_progress,blocked,deferred',
+    '--json',
+  ])
+  if (ran.kind !== 'ran' || ran.result.exitCode !== 0) return
+  const assigned = parseAssigned(ran.result.stdout)
+  await update($, touched, all => ({
+    ...Object.fromEntries(assigned.map(r => [r.id, { how: 'assigned' as const, atMs: r.atMs }])),
+    ...all,
+  }))
+}
+
+// Adds the beads the session's title names, unless a command touched them.
+async function addTitled($: EngineInterface, bd: string, title: string): Promise<void> {
+  const found = await setupOf($, bd)
+  if (found.kind !== 'ready') return
+  const ids = idsIn(title, found.prefix)
+  if (ids.length === 0) return
+  const atMs = await $.clock.now()
+  await update($, touched, all => ({
+    ...Object.fromEntries(ids.map(id => [id, { how: 'in title' as const, atMs }])),
+    ...all,
+  }))
+}
+
+// Opens the pane on one bead, or on the session's list for null.
+async function openPane($: EngineInterface, id: string | null): Promise<void> {
+  await update($, selected, () => id)
+  await $.ui.open({ id: PANE, title: 'Beads' })
+}
+
+export const register: Register = (on, options) => {
+  const bd =
+    typeof options.bd_path === 'string' && options.bd_path.trim() !== ''
+      ? options.bd_path.trim()
+      : 'bd'
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'beads',
-      description: "Show the beads this session has claimed or worked on",
+      description: 'Show the beads this session has claimed or worked on',
     })
     return next(e)
   })
 
-  on('command.run', { command: 'beads' }, async $ => {
-    await update($, selected, () => null)
-    await $.ui.open({ id: PANE, title: 'Beads' })
-    return { text: "Opened this session's beads." }
+  // The title as the session starts or resumes. A rename later in the
+  // session shows at its next start: reading it on each prompt would add
+  // work to every prompt. The lookup runs after the event.
+  on('classic.SessionStart', async ($, e, next) => {
+    const title = e.session_title
+    if (title)
+      $.clock.after(0, () => {
+        addTitled($, bd, title).catch(err => logFailure($, "reading the session's title", err))
+      })
+    return next(e)
   })
 
-  // Records each bead a shell command changed, the main loop's or a subagent's.
+  on('command.run', { command: 'beads' }, async $ => {
+    if ((await read($, setup))?.kind !== 'ready') asking = null
+    refresh($, bd, Object.keys(await read($, touched)))
+    await openPane($, null)
+    return { text: 'Opened the beads pane.' }
+  })
+
+  // Records each bead a shell command changed, the main loop's or a
+  // subagent's, and asks again about the beads it named and their parents,
+  // whose children it may have changed.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const ran = await next(e)
-    const command = typeof e.command === 'string' ? e.command : ''
-    if (!/\bbd\s/.test(command)) return ran
-    const out = (ran as { result?: { stdout?: unknown } }).result?.stdout
-    const changed = changedBy(command, typeof out === 'string' ? out : '')
-    if (changed.length > 0) {
-      const at = await $.clock.now()
-      await update($, touched, all => {
-        const merged = { ...all }
-        for (const [ref, how] of changed) merged[ref] = { how, at }
-        return merged
-      })
-    }
+    if (!/\bbd\s/.test(e.command)) return ran
+    const found = await setupOf($, bd)
+    if (found.kind !== 'ready') return ran
+    const out = ran.result && !ran.isError ? ran.result.stdout : ''
+    const changed = changedBy(e.command, out, found.prefix)
+    if (changed.length === 0) return ran
+    const atMs = await $.clock.now()
+    await update($, touched, all => ({
+      ...all,
+      ...Object.fromEntries(changed.map(c => [c.id, { how: c.how, atMs }])),
+    }))
+    // A named bead the mod hasn't asked about yet waits until a draw needs it.
+    const known = await read($, beads)
+    const named = [
+      ...changed.map(c => c.id),
+      ...idsIn(e.command, found.prefix).filter(id => id in known),
+    ]
+    const parents = named.flatMap(id => {
+      const entry = known[id]
+      return entry?.kind === 'found' && entry.bead.parent ? [entry.bead.parent.id] : []
+    })
+    refresh($, bd, [...new Set([...named, ...parents])])
     return ran
   })
 
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
-    const ids = [...new Set(e.props.text.match(ID) ?? [])]
+    // The terminal marks a summary row only when it draws the row itself.
+    if (e.props.isSummary) return next(e)
+    const found = await read($, setup)
+    if (found?.kind !== 'ready') {
+      ensureSetup($, bd)
+      return next(e)
+    }
+    const ids = idsIn(e.props.text, found.prefix)
     if (ids.length === 0) return next(e)
 
     const known = await read($, beads)
-    for (const id of ids) if (!(id in known)) ensure($, id)
+    ensure(
+      $,
+      bd,
+      ids.filter(id => !(id in known)),
+    )
 
     // Only a bead the lookup found becomes a link; the rest stays text.
-    const links = ids.filter(id => known[id])
+    const links = ids.filter(id => known[id]?.kind === 'found')
     if (links.length === 0) return next(e)
 
     const { Markdown } = $.ui.resolve(e)
-    const text = e.props.text.replace(ID, id =>
-      known[id] ? `[${id}](${BASE}${id})` : id,
+    const text = linkIds(e.props.text, found.prefix, id =>
+      known[id]?.kind === 'found' ? `[${id}](${BASE}${id})` : null,
     )
 
     return (
@@ -269,9 +329,10 @@ export const register: Register = on => {
         key={`msg-${e.requestId}`}
         text={text}
         pressableLinks={links.map(id => `${BASE}${id}`)}
-        onLinkPress={async link => {
-          await update($, selected, () => link.href.slice(BASE.length))
-          await $.ui.open({ id: PANE, title: 'Beads' })
+        onLinkPress={link => {
+          openPane($, link.href.slice(BASE.length)).catch(err =>
+            logFailure($, 'opening a bead', err),
+          )
         }}
       />
     )
@@ -279,40 +340,71 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Markdown } = $.ui.resolve(e)
+    const found = await read($, setup)
+    if (found?.kind !== 'ready') {
+      ensureSetup($, bd)
+      return (
+        <Box flexDirection="column" gap="xs">
+          {found === null && <Text color="subtle">Looking for the beads database…</Text>}
+          {found?.kind === 'no-bd' && (
+            <Text>
+              Couldn't run {found.bd}: {found.detail}
+            </Text>
+          )}
+          {found?.kind === 'no-bd' && (
+            <Text color="subtle">
+              If bd isn't on the PATH Claude Code starts with, set its full path with {CONFIGURE}.
+            </Text>
+          )}
+          {found?.kind === 'no-database' && (
+            <Text>bd found no beads database from this session's folder.</Text>
+          )}
+          {found?.kind === 'no-database' && found.detail !== '' && (
+            <Text color="subtle">{found.detail}</Text>
+          )}
+          {found?.kind === 'no-database' && (
+            <Text color="subtle">After creating one, run /beads to look again.</Text>
+          )}
+        </Box>
+      )
+    }
+    const prefix = found.prefix
     const id = await read($, selected)
     const all = await read($, beads)
 
-    const now = await $.clock.now()
+    const nowMs = await $.clock.now()
     const isExpanded = (await read($, expanded)) === id
-    const go = async (to: string) => {
-      ensure($, to)
-      await update($, selected, () => to)
-    }
     // Every link in the pane is Markdown, so one handler serves them all.
     const press = async (href: string) => {
       const target = href.slice(BASE.length)
       if (target === '~all') return update($, expanded, v => (v === id ? null : id))
       if (target === '~home') return update($, selected, () => null)
-      return go(target)
+      refresh($, bd, [target])
+      return update($, selected, () => target)
     }
     const md = (key: string, text: string) => {
-      const links = [...text.matchAll(/\]\((https:\/\/beads\.invalid\/[^)\s]+)\)/g)].map(m => m[1])
+      const links = [...text.matchAll(/\]\(([^)\s]+)\)/g)].flatMap(m =>
+        m[1]?.startsWith(BASE) ? [m[1]] : [],
+      )
       return (
         <Markdown
           key={key}
           text={text}
           pressableLinks={links}
-          onLinkPress={link => press(link.href)}
+          onLinkPress={link => {
+            press(link.href).catch(err => logFailure($, 'following a link in the pane', err))
+          }}
         />
       )
     }
     const link = (to: string, label = to) => `[${label}](${BASE}${to})`
-    // An ID in prose keeps its hyphen from breaking the line (`fp-` / `g5h6`):
-    // the label gets a non-breaking hyphen, the link keeps the real ID.
-    const linkify = (text: string) => text.replace(ID, ref => link(ref, ref.replace(/-/g, '\u2011')))
+    // An ID in prose keeps its hyphen from breaking the line (`demo-` /
+    // `g5h6`): the label gets a non-breaking hyphen, the link keeps the real ID.
+    const linkify = (text: string) =>
+      linkIds(text, prefix, ref => link(ref, ref.replace(/-/g, '‑')))
 
     // A section: a small upper-case heading over its content.
-    const section = (key: string, heading: string, body: unknown, color = 'subtle') => (
+    const section = (key: string, heading: string, body: RenderChildren, color = 'subtle') => (
       <Box key={key} flexDirection="column" gap="xs">
         <Text size="caption" weight="semibold" color={color}>
           {heading.toUpperCase()}
@@ -324,9 +416,9 @@ export const register: Register = on => {
     // and the title as the link. A closed bead's title isn't dimmed, because
     // dim link blue on a dark background is hard to read. Children show only
     // their own `.n`, since the parent's ID is in the breadcrumb.
-    const list = (key: string, refs: Ref[], prefix = '', notes: Record<string, string> = {}) => {
+    const list = (key: string, refs: Ref[], parentId = '', notes: Record<string, string> = {}) => {
       const shortOf = (r: Ref) =>
-        prefix && r.id.startsWith(`${prefix}.`) ? r.id.slice(prefix.length) : r.id
+        parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
       // The ID column is as wide as the longest ID in this list and no wider:
       // `.1`–`.7` take two cells, a list that reaches `.178` takes four.
       const idWidth = Math.max(...refs.map(r => shortOf(r).length))
@@ -355,55 +447,66 @@ export const register: Register = on => {
     }
 
     // Home: the beads this session has touched, most recent first, with what
-    // it last did to each. The top row stays where the breadcrumb is drawn.
+    // it last did to each. The pane's title says what it is.
     if (id === null) {
-      askActor($)
-      const seen = Object.entries(await read($, touched)).sort(([, a], [, b]) => b.at - a.at)
-      for (const [ref] of seen) if (!(ref in all)) ensure($, ref)
-      const rows: Ref[] = seen
-        .filter(([ref]) => all[ref] !== null)
-        .map(([ref]) => ({ id: ref, title: all[ref]?.title ?? '', status: all[ref]?.status ?? '' }))
+      askActor($, bd)
+      const seen = Object.entries(await read($, touched)).sort(([, a], [, b]) => b.atMs - a.atMs)
+      ensure(
+        $,
+        bd,
+        seen.flatMap(([ref]) => (ref in all ? [] : [ref])),
+      )
+      const rows: Ref[] = seen.flatMap(([ref]) => {
+        const entry = all[ref]
+        if (entry?.kind === 'missing') return []
+        const bead = entry?.kind === 'found' ? entry.bead : null
+        return [{ id: ref, title: bead?.title ?? '', status: bead?.status ?? '' }]
+      })
       const notes = Object.fromEntries(seen.map(([ref, t]) => [ref, t.how]))
+      return rows.length > 0 ? (
+        list('session', rows, '', notes)
+      ) : (
+        <Text color="subtle">
+          None yet. A bead this session claims, creates, changes or closes shows here.
+        </Text>
+      )
+    }
+    const entry = all[id]
+    if (entry === undefined) return <Text color="subtle">Loading {id}…</Text>
+    if (entry.kind === 'missing')
+      return <Text color="subtle">{id} is not a bead in this project.</Text>
+    if (entry.kind === 'failed') {
       return (
-        <Box flexDirection="column" gap="lg">
-          <Box flexDirection="column" gap="xs">
-            <Markdown key="trail" text="Session" />
-            <Text size="heading" weight="semibold">
-              This session's beads
-            </Text>
-          </Box>
-          {rows.length > 0 ? (
-            list('session', rows, '', notes)
-          ) : (
-            <Text color="subtle">None yet. A bead this session claims, creates, changes or closes shows here.</Text>
-          )}
+        <Box flexDirection="column" gap="xs">
+          <Text>
+            Couldn't read {id}: {entry.detail}
+          </Text>
+          {md('retry', link(id, 'Try again'))}
         </Box>
       )
     }
-    const bead = all[id]
-    if (bead === undefined) return <Text color="subtle">Loading {id}…</Text>
-    if (bead === null) return <Text color="subtle">{id} is not a bead.</Text>
+    const bead = entry.bead
 
     // The chain of beads above this one, outermost first, as far as it is known.
     const above: Ref[] = []
-    for (let ref = bead.parent, seen = 0; ref && seen < 8; seen++) {
+    for (let ref = bead.parent, depth = 0; ref && depth < 8; depth++) {
       above.unshift(ref)
-      ensure($, ref.id)
       const up = all[ref.id]
-      ref = up ? up.parent : null
+      ref = up?.kind === 'found' ? up.bead.parent : null
     }
-    for (const b of bead.blockedBy) if (!(b.id in all)) ensure($, b.id)
+    ensure(
+      $,
+      bd,
+      [...above, ...bead.blockedBy].flatMap(r => (r.id in all ? [] : [r.id])),
+    )
 
-    // The breadcrumb: each bead below the first by its own `.n`, as the IDs
-    // nest (`fp-g5h6 › .5 › .1`); the bead shown is the last, unlinked.
-    const trail = [...above.map(r => r.id), id]
-      .map((ref, i, all) => {
-        const prev = all[i - 1]
-        const label = prev && ref.startsWith(`${prev}.`) ? ref.slice(prev.length) : ref
-        return i === all.length - 1 ? label : link(ref, label)
-      })
+    // The breadcrumb: "Recent", the pane's list, then each bead above, then
+    // this one, unlinked.
+    const chain = [...above.map(r => r.id), id]
+    const trail = trailLabels(chain)
+      .map((label, i) => (i === chain.length - 1 ? label : link(chain[i] ?? '', label)))
       .join(' › ')
-    const crumbs = `${link('~home', 'Session')} › ${trail}`
+    const crumbs = `${link('~home', 'Recent')} › ${trail}`
 
     const status = statusOf(bead.status)
 
@@ -412,21 +515,16 @@ export const register: Register = on => {
 
     const kids = bead.children
     const doneKids = kids.filter(k => k.status === 'closed')
-    const BAR = 12
-    const filled = kids.length ? Math.round((doneKids.length / kids.length) * BAR) : 0
-    // A long list is summarised: a count for each status, then the first few
-    // in ID order and a link to the rest. Order, not status, decides what shows.
+    // A bar with a run of cells in each status's colour, done first, as the
+    // context bar shows what fills the window.
+    const runs = barRuns(kids, 20)
+    // A long list is summarised: a count for each status left, then the work
+    // left and a link to the rest. The heading counts the closed ones.
     const LONG = 12
     const FIRST = 8
     const isLong = kids.length > LONG
-    const shown = isLong && !isExpanded ? kids.slice(0, FIRST) : kids
-    // The heading already counts the closed ones (`120/178`), so the summary
-    // counts only the rest, and says nothing when nothing else is left.
-    const counts = Object.entries(
-      kids
-        .filter(k => k.status !== 'closed')
-        .reduce<Record<string, number>>((n, k) => ({ ...n, [k.status]: (n[k.status] ?? 0) + 1 }), {}),
-    )
+    const shown = isLong && !isExpanded ? summarised(kids, FIRST) : kids
+    const counts = countByStatus(kids).filter(([st]) => st !== 'closed')
     const children = kids.length > 0 && (
       <Box key="children" flexDirection="column" gap="xs">
         <Box gap="sm" alignItems="center">
@@ -437,10 +535,11 @@ export const register: Register = on => {
             {doneKids.length}/{kids.length}
           </Text>
           <Text size="caption">
-            <Text color="success" dimColor>
-              {'━'.repeat(filled)}
-            </Text>
-            <Text color="subtle">{'━'.repeat(BAR - filled)}</Text>
+            {runs.map(([st, n]) => (
+              <Text key={`bar-${st}`} color={statusOf(st).color} dimColor={st === 'closed'}>
+                {'━'.repeat(n)}
+              </Text>
+            ))}
           </Text>
         </Box>
         {isLong && counts.length > 0 && (
@@ -454,8 +553,7 @@ export const register: Register = on => {
           </Box>
         )}
         {list('kids', shown, id)}
-        {isLong &&
-          md('all', link('~all', isExpanded ? 'Show fewer' : `Show all ${kids.length}`))}
+        {isLong && md('all', link('~all', isExpanded ? 'Show fewer' : `Show all ${kids.length}`))}
       </Box>
     )
 
@@ -466,20 +564,12 @@ export const register: Register = on => {
         <Box flexDirection="column" gap="xs">
           {/* The breadcrumb row is always drawn, so the rest of the pane stays
               in place when it moves to another bead. It is the pane's only
-              navigation: "Session" leads to this session's beads, ancestors
+              navigation: "Recent" leads to this session's beads, ancestors
               are links, and the conversation's links reopen anything else. */}
-          <Box>
-            <Markdown
-              key="trail"
-              text={crumbs}
-              pressableLinks={[`${BASE}~home`, ...above.map(r => `${BASE}${r.id}`)]}
-              onLinkPress={l => press(l.href)}
-            />
-          </Box>
+          <Box>{md('trail', crumbs)}</Box>
           <Text size="heading" weight="semibold">
             {bead.title}
           </Text>
-          {/* Status, priority, type and assignee on one line, the dates under it. */}
           <Text size="footnote">
             <Text color={status.color} dimColor={bead.status === 'closed'}>
               {GLYPH[bead.status] ?? '○'}{' '}
@@ -495,17 +585,19 @@ export const register: Register = on => {
             {bead.assignee ? bead.assignee : <Text color="subtle">Unassigned</Text>}
           </Text>
           <Text size="caption" color="subtle">
-            Updated {ago(bead.updated, now)} · created {ago(bead.created, now)}
+            Updated {ago(bead.updatedMs, nowMs)} · created {ago(bead.createdMs, nowMs)}
           </Text>
         </Box>
         {openBlockers.length > 0 &&
-          section('blockers', `Blocked by`, list('blocker-list', openBlockers), 'error')}
+          section('blockers', 'Blocked by', list('blocker-list', openBlockers), 'error')}
         {openBlockers.length === 0 && doneBlockers > 0 && (
           <Text size="footnote" color="subtle">
             <Text color="success" dimColor>
               {GLYPH.closed}{' '}
             </Text>
-            {doneBlockers === 1 ? 'Its blocker is closed' : `All ${doneBlockers} blockers are closed`}
+            {doneBlockers === 1
+              ? 'Its blocker is closed'
+              : `All ${doneBlockers} blockers are closed`}
           </Text>
         )}
         {isEpic && children}
@@ -514,7 +606,9 @@ export const register: Register = on => {
         {bead.status === 'closed' &&
           bead.closeReason.trim() !== '' &&
           section('resolution', 'Resolution', md('text-resolution', linkify(bead.closeReason)))}
-        {bead.extras.map(x => section(`extra-${x.label}`, x.label, md(`text-${x.label}`, linkify(x.text))))}
+        {bead.extras.map(x =>
+          section(`extra-${x.label}`, x.label, md(`text-${x.label}`, linkify(x.text))),
+        )}
         {!isEpic && children}
       </Box>
     )

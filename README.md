@@ -1,33 +1,44 @@
 # bead-pane
 
 A Claude Code mod for [beads](https://github.com/steveyegge/beads). It turns each bead ID in
-Claude's replies, such as `fp-g5h6.4`, into a link. Clicking the link opens the bead in a side
+Claude's replies, such as `demo-g5h6.4`, into a link. Clicking the link opens the bead in a side
 pane. The pane shows:
 
 - the title, status, priority, type, assignee and dates
 - the beads above it, as a breadcrumb
 - its open blockers
 - the description, notes, design, acceptance criteria and close reason
-- its children with their status, summarised past 12
+- its children, with a bar coloured by status; past 12, the ones still open, and a link to all
 
-Bead IDs in the pane are links too, so you can move through the tree from there.
+Bead IDs in the pane are links too, so you can move through the tree from there. An ID inside
+code, such as `` `bd show demo-g5h6` ``, stays as written.
 
-The pane's home, `/beads` or "Session" in the breadcrumb, lists the beads this session has
-touched, most recent first, with what it last did to each. The mod adds a bead when a `bd`
-command in the session claims, creates, updates, comments on, links, closes or reopens it,
-including a subagent's command. It also adds the beads assigned to the session's `BEADS_ACTOR`,
-which covers a claim made before the mod loaded.
+`/beads`, or "Recent" in the breadcrumb, lists the beads this session has touched, most recent
+first, with what it last did to each. The mod adds a bead when:
 
-The mod reads beads with `bd show <id> --json` and `bd children <id> --json`. It doesn't change
-them. It looks up each bead once, after the message has drawn, and keeps the answer for the
-session. Neither the reply nor the model waits on `bd`, and the lookup uses no tokens.
+- a `bd` command in the session claims, creates, updates, comments on, links, closes or reopens
+  it, a subagent's command included
+- the session's title names it as the session starts or resumes
+- it's open and assigned to the session's `BEADS_ACTOR`, which covers a claim made before the
+  mod loaded. Without `BEADS_ACTOR` the mod skips this.
+
+The mod reads beads with `bd show --json` and `bd children --json` and doesn't change them. It
+looks beads up after a message has drawn, all the IDs a draw needs in one `bd show`, and keeps
+the answers for the session. Neither the reply nor the model waits on `bd`, and the lookups use
+no tokens. A `bd` command in the session that changes a bead looks it up again, and so does
+opening it in the pane.
+
+The mod asks `bd config get issue_prefix` for the project's prefix, so it links only that
+project's IDs. If `bd` can't run, or finds no database from the session's folder, the pane says
+so.
 
 ## Requirements
 
-- Claude Code with mods, in the terminal or the desktop app. It was built and tested on v2.1.317.
-- `bd` at `/opt/homebrew/bin/bd`, with its database reachable from the shell Claude Code runs in.
-- Bead IDs with the `fp-` prefix. The prefix and the `bd` path are constants at the top of
-  `hooks/register.tsx` (`ID` and `BD`).
+- Claude Code with [mods](https://code.claude.com/docs/en/plugins/mods/overview), in the
+  terminal or the desktop app. It was built and tested on v2.1.317. Earlier versions are
+  untested, and some lack `--marketplace` on `claude plugin install`.
+- [`bd`](https://github.com/steveyegge/beads), with a beads database that `bd` finds from the
+  session's folder, through a `.beads` folder above it or `BEADS_DIR`.
 
 ## Install
 
@@ -46,25 +57,46 @@ claude plugin install bead-pane --marketplace adrian-baker/bead-pane
 In the desktop app, where `/plugin` doesn't run: click + next to the prompt box, then Plugins,
 Add marketplace with `adrian-baker/bead-pane`, then Add plugin.
 
-The repository is private, so the install needs read access to it on GitHub and a git credential
-for github.com on the machine (an SSH key, or `gh auth login` then `gh auth setup-git`).
+## Configure
+
+The mod runs `bd` from the PATH Claude Code starts with. The desktop app, started from the Dock,
+may not have Homebrew's folder on that PATH. If the pane says it couldn't run `bd`, give the full
+path, from `which bd`, at a session's prompt:
+
+```
+/plugin configure bead-pane@bead-pane
+```
+
+Or set it when installing from a shell:
+
+```bash
+claude plugin install bead-pane --marketplace adrian-baker/bead-pane --config bd_path=/opt/homebrew/bin/bd
+```
+
+After creating a beads database for a session that had none, run `/beads` to look again.
 
 ## Developing
 
-Run it from this folder in a session of its own, which reloads it on each save:
+From a clone, run Claude Code with the mod loaded from it. It reloads the mod on each save, and
+on its first load it writes the API's types to `.claude-plugin/types/`, which `tsconfig.json`
+extends:
 
 ```bash
-claude --plugin-dir ~/mods/bead-pane
+claude --plugin-dir .
 ```
 
-Check and test it:
+Check, test and type-check it:
 
 ```bash
-claude plugin validate ~/mods/bead-pane
+claude plugin validate .
 ```
 
 ```bash
-claude plugin test ~/mods/bead-pane
+claude plugin test .
+```
+
+```bash
+npx tsc -p .
 ```
 
 ## Known limitation
@@ -73,3 +105,7 @@ Text in the pane can't be selected in the desktop app. Claude Code's desktop app
 selection for everything a mod draws in a pane
 ([anthropics/claude-code#105492](https://github.com/anthropics/claude-code/issues/105492)), and no
 element has a prop to turn it back on. Copy from the conversation, or from `bd show`.
+
+## License
+
+[MIT](LICENSE)

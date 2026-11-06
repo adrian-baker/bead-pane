@@ -1,6 +1,17 @@
 {
   "name": "bead-pane",
-  "version": "0.2.0",
-  "description": "Click a beads ID (fp-xxxx) in Claude's replies to open the bead in a side pane: status, children, blockers, notes",
-  "types": "./types/index.d.ts"
+  "version": "0.3.0",
+  "description": "Click a beads issue ID in Claude's replies to open the bead in a side pane: status, children, blockers, notes",
+  "author": { "name": "Adrian Baker", "url": "https://github.com/adrian-baker" },
+  "homepage": "https://github.com/adrian-baker/bead-pane",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "bd_path": {
+      "type": "string",
+      "title": "bd command",
+      "description": "The bd executable: a name on the PATH Claude Code starts with, or a full path such as /opt/homebrew/bin/bd",
+      "default": "bd"
+    }
+  }
 }

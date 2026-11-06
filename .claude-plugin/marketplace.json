@@ -1,12 +1,6 @@
 {
   "name": "bead-pane",
-  "owner": {
-    "name": "Adrian Baker"
-  },
-  "plugins": [
-    {
-      "name": "bead-pane",
-      "source": "./"
-    }
-  ]
+  "owner": { "name": "Adrian Baker" },
+  "description": "bead-pane, a Claude Code mod that opens beads issues in a side pane",
+  "plugins": [{ "name": "bead-pane", "source": "./" }]
 }
