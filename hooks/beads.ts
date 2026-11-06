@@ -389,6 +389,21 @@ export const iconSvg = (name: IconName): string =>
   `stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">` +
   `<path d="${ICON_PATHS[name]}"/></svg>`
 
+// The rows grouped under their parents, in the order each group first
+// appears. A row with no parent is a group of its own, so the list keeps its
+// order where nothing nests.
+export const underParents = (
+  rows: readonly Ref[],
+  parentOf: (id: string) => Ref | null,
+): { parent: Ref | null; rows: Ref[] }[] =>
+  rows.reduce<{ parent: Ref | null; rows: Ref[] }[]>((groups, row) => {
+    const parent = parentOf(row.id)
+    const group = parent ? groups.find(g => g.parent?.id === parent.id) : undefined
+    return group
+      ? groups.map(g => (g === group ? { ...g, rows: [...g.rows, row] } : g))
+      : [...groups, { parent, rows: [row] }]
+  }, [])
+
 // A speech bubble with the count in it, as an SVG: a filled rounded box with
 // a tail, the number in bold white, wider for each digit. The colours are
 // fixed, since an SVG draws as an image without the theme; this blue reads on

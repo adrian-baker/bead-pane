@@ -28,6 +28,7 @@ import {
   parseShown,
   summarised,
   trailLabels,
+  underParents,
 } from './beads'
 
 // Links the mod draws point here, a host that can't resolve, and a press on
@@ -164,8 +165,8 @@ function ensureSetup($: EngineInterface, bd: string): void {
   })
 }
 
-// Beads whose comments the pane has asked for this load.
-const commentsAsked = new Set<string>()
+// Beads whose comments the pane has asked for and not yet had back.
+const commentsPending = new Set<string>()
 
 // Bead IDs asked about this load. Answers stay in `beads` across a reload,
 // so a draw asks only about an ID it has no answer for. A bd command that
@@ -239,6 +240,7 @@ async function lookUp($: EngineInterface, bd: string): Promise<void> {
           }
   }
   await update($, beads, all => ({ ...all, ...lookups }))
+  for (const id of ids) commentsPending.delete(id)
 }
 
 // Adds the open beads the beads actor holds, once per load: a bead this
@@ -561,14 +563,28 @@ export const register: Register = (on, options) => {
     const prefix = found.prefix
     const all = await read($, beads)
     const wanted = await read($, selected)
-    // While the bead the pane moved to is looked up, it keeps drawing the one
-    // it showed, so it switches once instead of flashing "Loading…".
+    // While the bead the pane moved to is looked up, or its comments are, it
+    // keeps drawing the one it showed, so it switches once to the whole bead
+    // instead of flashing "Loading…" or pushing the page down when the
+    // comments arrive.
+    const wantedEntry = wanted === null ? undefined : all[wanted]
+    if (wanted !== null && wantedEntry === undefined) ensure($, bd, [wanted])
+    if (
+      wanted !== null &&
+      wantedEntry?.kind === 'found' &&
+      wantedEntry.bead.commentCount > 0 &&
+      wantedEntry.bead.comments === null &&
+      !commentsPending.has(wanted)
+    ) {
+      commentsPending.add(wanted)
+      refresh($, bd, [wanted])
+    }
     const isWaiting =
       wanted !== null &&
-      all[wanted] === undefined &&
+      wanted !== lastShown &&
+      (wantedEntry === undefined || commentsPending.has(wanted)) &&
       lastShown !== null &&
       all[lastShown]?.kind === 'found'
-    if (wanted !== null && all[wanted] === undefined) ensure($, bd, [wanted])
     const id = isWaiting ? lastShown : wanted
 
     const nowMs = await $.clock.now()
@@ -694,6 +710,7 @@ export const register: Register = (on, options) => {
       parentId = '',
       notes: Record<string, string> = {},
       spaced = false,
+      rowKey = key,
     ) => {
       const shortOf = (r: Ref) =>
         parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
@@ -706,7 +723,7 @@ export const register: Register = (on, options) => {
       return (
         <Box key={key} flexDirection="column" gap={spaced ? 'xs' : undefined}>
           {refs.map(r => (
-            <Box key={`${key}-${r.id}`} gap="xs" alignItems="flex-start">
+            <Box key={`${rowKey}-${r.id}`} gap="xs" alignItems="flex-start">
               <Box width={idWidth} flexShrink={0} justifyContent={align}>
                 <Text color="subtle">{shortOf(r)}</Text>
               </Box>
@@ -714,7 +731,7 @@ export const register: Register = (on, options) => {
                 {GLYPH[r.status] ?? '○'}
               </Text>
               <Box flexGrow={1} flexShrink={1}>
-                {md(`${key}-${r.id}-title`, link(r.id, r.title || r.id))}
+                {md(`${rowKey}-${r.id}-title`, link(r.id, r.title || r.id))}
               </Box>
               {notes[r.id] && (
                 <Text size="footnote" color="subtle">
@@ -756,12 +773,43 @@ export const register: Register = (on, options) => {
           </Text>
         )
       }
+      // Beads that share a parent sit under its title, each by its own
+      // `.n`, so the parent shows once; a bead with none is a row of its own.
+      const parentOf = (ref: string) => {
+        const entry = all[ref]
+        return entry?.kind === 'found' ? entry.bead.parent : null
+      }
+      const tree = (key: string, rows: Ref[], rowNotes: Record<string, string>) => (
+        <Box key={key} flexDirection="column" gap="sm">
+          {underParents(rows, parentOf).map(group =>
+            group.parent === null ? (
+              list(`${key}-group-${group.rows[0]?.id}`, group.rows, '', rowNotes, true, key)
+            ) : (
+              <Box key={`${key}-under-${group.parent.id}`} flexDirection="column" gap="xs">
+                <Text size="caption" color="subtle">
+                  {group.parent.title || group.parent.id}
+                </Text>
+                <Box paddingLeft="md">
+                  {list(
+                    `${key}-group-${group.parent.id}`,
+                    group.rows,
+                    group.parent.id,
+                    rowNotes,
+                    true,
+                    key,
+                  )}
+                </Box>
+              </Box>
+            ),
+          )}
+        </Box>
+      )
       return (
         <Box flexDirection="column" gap="lg">
           {worked.length > 0 &&
-            section('worked-section', 'Worked on', list('worked', worked, '', notes, true))}
+            section('worked-section', 'Worked on', tree('worked', worked, notes))}
           {looked.length > 0 &&
-            section('mentioned-section', 'Mentioned', list('mentioned', looked, '', {}, true))}
+            section('mentioned-section', 'Mentioned', tree('mentioned', looked, {}))}
         </Box>
       )
     }
@@ -781,12 +829,6 @@ export const register: Register = (on, options) => {
     }
     const bead = entry.bead
     lastShown = id
-    // A bead opened from a reply was looked up before it was shown, without
-    // its comments: ask again, once.
-    if (bead.commentCount > 0 && bead.comments === null && !commentsAsked.has(id)) {
-      commentsAsked.add(id)
-      refresh($, bd, [id])
-    }
 
     // The chain of beads above this one, outermost first, as far as it is known.
     const above: Ref[] = []

@@ -116,11 +116,11 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   // The reply's links are in the list as mentioned. Opening a bead adds nothing.
   await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/~home' } })
   await settle(clock)
-  expect(keysOf((await pane.find({ key: 'mentioned' }))?.children)).toEqual([
-    'mentioned-demo-a1b2c',
-    'mentioned-demo-g5h6.4',
-  ])
-  expect(await pane.find({ key: 'worked' })).toBeFalsy()
+  // demo-a1b2c sits under its parent's title; demo-g5h6.4 has none here.
+  expect(await pane.find({ type: 'Text', text: 'The epic' })).toBeTruthy()
+  expect(await pane.find({ key: 'mentioned-demo-a1b2c' })).toBeTruthy()
+  expect(await pane.find({ key: 'mentioned-demo-g5h6.4' })).toBeTruthy()
+  expect(await pane.find({ key: 'worked-section' })).toBeFalsy()
   expect(await pane.find({ type: 'Text', text: /^mentioned$/ })).toBeFalsy()
 
   // Back to the bead from the conversation, and up to a parent bd doesn't know.
@@ -225,11 +225,12 @@ test("the pane's list holds the beads this session's bd commands changed, kept c
   await settle(clock)
   // `bd show` changes nothing, the quoted title isn't searched, and the
   // parent of a create isn't touched.
-  expect(keysOf((await pane.find({ key: 'worked' }))?.children).sort()).toEqual([
-    'worked-demo-clm1',
-    'worked-demo-new1',
-    'worked-demo-old1',
-  ])
+  for (const ref of ['demo-clm1', 'demo-new1', 'demo-old1']) {
+    expect(await pane.find({ key: `worked-${ref}` })).toBeTruthy()
+  }
+  for (const ref of ['demo-shw1', 'demo-xxx1', 'demo-epic1']) {
+    expect(await pane.find({ key: `worked-${ref}` })).toBeFalsy()
+  }
   expect(await pane.find({ type: 'Text', text: /^claimed$/ })).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: /^created$/ })).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: /^assigned$/ })).toBeTruthy()
@@ -352,7 +353,7 @@ test("a bead the session's title names is in the pane's list", async ($, on) => 
   await $.classic.SessionStart({ source: 'resume', session_title: 'demo-t1t2 event page pass' })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
-  expect(keysOf((await pane.find({ key: 'worked' }))?.children)).toEqual(['worked-demo-t1t2'])
+  expect(await pane.find({ key: 'worked-demo-t1t2' })).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: /^in title$/ })).toBeTruthy()
   await pane.unmount()
 })
@@ -705,6 +706,47 @@ test('PR and issue numbers in a bead link to its GitHub repository', async ($, o
   expect(textOf(await pane.find({ key: 'ref' }))).toBe(
     '[PR 4610](https://github.com/acme/widgets/pull/4610)',
   )
+  await pane.unmount()
+  await ui.unmount()
+})
+
+test('moving up to a parent with comments waits for them, then switches once', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  on(
+    'process.run',
+    fakeBd({
+      beads: {
+        'demo-epic3.1': row('demo-epic3.1', {
+          dependencies: [
+            { ...row('demo-epic3', { title: 'The epic' }), dependency_type: 'parent-child' },
+          ],
+        }),
+        'demo-epic3': row('demo-epic3', { title: 'The epic', comment_count: 1 }),
+      },
+      comments: {
+        'demo-epic3': [{ author: 'Ana', text: 'Note.', created_at: '2026-11-05T12:00:00Z' }],
+      },
+    }),
+  )
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+  const ui = await $.ui.mount(message('See demo-epic3.1.'))
+  await settle(clock)
+  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-epic3.1' } })
+  const pane = await $.ui.mount(PANE)
+  await settle(clock)
+  // The parent is cached as an ancestor, without its comments.
+  await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/demo-epic3' } })
+  // Until they're in, the pane still shows the child.
+  expect(textOf(await pane.find({ key: 'trail' }))).toMatch(/› \.1$/)
+  await settle(clock)
+  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
+    '[☰](https://beads.invalid/~home) › demo-epic3',
+  )
+  expect(await pane.find({ type: 'Text', text: 'COMMENTS' })).toBeTruthy()
   await pane.unmount()
   await ui.unmount()
 })
