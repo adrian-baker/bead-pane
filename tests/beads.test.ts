@@ -5,10 +5,12 @@ import {
   changedBy,
   countBubble,
   datedEntries,
+  fileLinks,
   keepLineBreaks,
   linkGitHub,
   parseGitHubRepo,
   refLabel,
+  relinkFiles,
   refUrl,
   idsIn,
   isWork,
@@ -170,11 +172,26 @@ test('rows group under a shared parent, in the order each group first appears', 
   const epic = ref('demo-e')
   const parents: Record<string, typeof epic> = { 'demo-e.1': epic, 'demo-e.2': epic }
   const groups = underParents(
-    [ref('demo-e.2'), ref('demo-x'), ref('demo-e.1')],
+    [ref('demo-e.2'), ref('demo-x'), ref('demo-y'), ref('demo-e.1')],
     id => parents[id] ?? null,
   )
   expect(groups.map(g => [g.parent?.id ?? null, g.rows.map(r => r.id)])).toEqual([
     ['demo-e', ['demo-e.2', 'demo-e.1']],
-    [null, ['demo-x']],
+    [null, ['demo-x', 'demo-y']],
   ])
+})
+
+test('file links are found outside code and rewritten by where the file is', () => {
+  const text =
+    'See [the approach](docs/approach.md#plan), [the code](src/a.ts), [GitHub](https://x.test) ' +
+    'and `[not this](docs/b.md)`.'
+  expect(fileLinks(text)).toEqual(['docs/approach.md', 'src/a.ts'])
+  const where: Record<string, string | null> = {
+    'docs/approach.md': 'https://gh.test/approach.md',
+    'src/a.ts': null,
+  }
+  expect(relinkFiles(text, path => where[path])).toBe(
+    'See [the approach](https://gh.test/approach.md), the code, [GitHub](https://x.test) ' +
+      'and `[not this](docs/b.md)`.',
+  )
 })

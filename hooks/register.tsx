@@ -9,6 +9,7 @@ import {
   changedBy,
   countBubble,
   datedEntries,
+  fileLinks,
   iconSvg,
   keepLineBreaks,
   linkGitHub,
@@ -29,6 +30,7 @@ import {
   summarised,
   trailLabels,
   underParents,
+  relinkFiles,
 } from './beads'
 
 // Links the mod draws point here, a host that can't resolve, and a press on
@@ -163,6 +165,32 @@ function ensureSetup($: EngineInterface, bd: string): void {
   $.clock.after(0, () => {
     setupOf($, bd).catch(err => logFailure($, 'asking bd for the prefix', err))
   })
+}
+
+// Whether each file a bead links to exists, by its path from the session's
+// folder, and for one that doesn't, its copy on GitHub at the newest pushed
+// commit that has it, or null when none does. Each asked once per load.
+const fileExists = new Map<string, boolean>()
+const fileElsewhere = new Map<string, string | null>()
+
+// Finds a file missing from the session's folder on the branches pushed to
+// origin, such as a design on an open pull request's branch, after the draw.
+function findElsewhere($: EngineInterface, path: string, repo: string): void {
+  fileElsewhere.set(path, null)
+  $.clock.after(0, () => {
+    lookElsewhere($, path, repo).catch(err => logFailure($, 'finding a linked file', err))
+  })
+}
+
+async function lookElsewhere($: EngineInterface, path: string, repo: string): Promise<void> {
+  const ran = await $.process.run(
+    ['git', 'log', '--remotes=origin', '--diff-filter=AM', '--format=%H', '-1', '--', path],
+    { timeoutMs: TIMEOUT_MS },
+  )
+  const sha = ran.exitCode === 0 ? ran.stdout.trim() : ''
+  if (!/^[0-9a-f]{40}$/.test(sha)) return
+  fileElsewhere.set(path, `https://github.com/${repo}/blob/${sha}/${path}`)
+  await update($, pulse, n => n + 1)
 }
 
 // Beads whose comments the pane has asked for and not yet had back.
@@ -631,8 +659,32 @@ export const register: Register = (on, options) => {
     // An ID in prose keeps its hyphen from breaking the line (`demo-` /
     // `g5h6`): the label gets a non-breaking hyphen, the link keeps the real ID.
     const repo = found.repo
+    // The files the shown bead links to that aren't in the session's folder,
+    // such as a design still on an open pull request's branch.
+    const shownBead = id === null ? undefined : all[id]
+    const texts =
+      shownBead?.kind === 'found'
+        ? [
+            shownBead.bead.description,
+            shownBead.bead.closeReason,
+            ...shownBead.bead.extras.map(x => x.text),
+            ...(shownBead.bead.comments ?? []).map(c => c.text),
+          ]
+        : []
+    for (const path of texts.flatMap(fileLinks)) {
+      if (!fileExists.has(path)) fileExists.set(path, await $.fs.exists(path))
+      if (fileExists.get(path) === false && repo && !fileElsewhere.has(path)) {
+        findElsewhere($, path, repo)
+      }
+    }
+    // A link to a file here stays; one to a file only on a pushed branch goes
+    // to its copy on GitHub; one to a file on none is drawn as text.
+    const fileTarget = (path: string) =>
+      fileExists.get(path) === false ? (fileElsewhere.get(path) ?? null) : undefined
     const linkify = (text: string) => {
-      const withBeads = linkIds(text, prefix, ref => link(ref, ref.replace(/-/g, '‑')))
+      const withBeads = linkIds(relinkFiles(text, fileTarget), prefix, ref =>
+        link(ref, ref.replace(/-/g, '‑')),
+      )
       return keepLineBreaks(repo ? linkGitHub(withBeads, repo) : withBeads)
     }
 
@@ -711,6 +763,7 @@ export const register: Register = (on, options) => {
       notes: Record<string, string> = {},
       spaced = false,
       rowKey = key,
+      isRightAligned = parentId !== '',
     ) => {
       const shortOf = (r: Ref) =>
         parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
@@ -719,7 +772,7 @@ export const register: Register = (on, options) => {
       // `.9` or `.11`, right-aligned so it lines up on its last digit, as in a
       // table; a full ID is left-aligned, since they all start alike.
       const idWidth = Math.max(...refs.map(r => shortOf(r).length))
-      const align = parentId ? 'flex-end' : 'flex-start'
+      const align = isRightAligned ? 'flex-end' : 'flex-start'
       return (
         <Box key={key} flexDirection="column" gap={spaced ? 'xs' : undefined}>
           {refs.map(r => (
@@ -786,8 +839,10 @@ export const register: Register = (on, options) => {
               list(`${key}-group-${group.rows[0]?.id}`, group.rows, '', rowNotes, true, key)
             ) : (
               <Box key={`${key}-under-${group.parent.id}`} flexDirection="column" gap="xs">
+                {/* The parent's ID first, so `.20` below reads as its child. */}
                 <Text size="caption" color="subtle">
-                  {group.parent.title || group.parent.id}
+                  {group.parent.id}
+                  {group.parent.title ? `  ${group.parent.title}` : ''}
                 </Text>
                 <Box paddingLeft="md">
                   {list(
@@ -797,6 +852,7 @@ export const register: Register = (on, options) => {
                     rowNotes,
                     true,
                     key,
+                    false,
                   )}
                 </Box>
               </Box>

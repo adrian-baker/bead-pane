@@ -52,6 +52,8 @@ export type FakeBd = {
   assigned?: Record<string, unknown>[]
   // What `git remote get-url origin` prints; not a git checkout when absent.
   remote?: string
+  // The commit `git log --remotes=origin` names for a file on a pushed branch.
+  pushedCommits?: Record<string, string>
   // The Dolt folder `bd info` reports; none when absent.
   databasePath?: string
   // Every argument vector the mod ran, in order.
@@ -67,10 +69,14 @@ export const fakeBd =
     assigned = [],
     databasePath,
     remote,
+    pushedCommits = {},
     ran = [],
   }: FakeBd) =>
   (_: unknown, e: { argv: readonly string[] }): Answer => {
     ran.push(e.argv)
+    if (e.argv[0] === 'git' && e.argv[1] === 'log') {
+      return answer(0, `${pushedCommits[e.argv[e.argv.length - 1] ?? ''] ?? ''}\n`)
+    }
     if (e.argv[0] === 'git') {
       return remote ? answer(0, `${remote}\n`) : answer(128, '', 'fatal: not a git repository')
     }

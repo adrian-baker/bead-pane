@@ -750,3 +750,39 @@ test('moving up to a parent with comments waits for them, then switches once', a
   await pane.unmount()
   await ui.unmount()
 })
+
+test("a link to a file that isn't here goes to its copy on a pushed branch", async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const sha = 'a'.repeat(40)
+  on(
+    'process.run',
+    fakeBd({
+      remote: 'https://github.com/acme/widgets.git',
+      pushedCommits: { 'docs/design.md': sha },
+      beads: {
+        'demo-a1b2c': row('demo-a1b2c', {
+          description:
+            'The [design](docs/design.md), the [code](src/a.ts) and the [lost](docs/gone.md).',
+        }),
+      },
+    }),
+  )
+  // The engine resolves a relative path from the session's folder.
+  on('fs.exists', (_, e) => ({ value: e.path.endsWith('/src/a.ts') || e.path === 'src/a.ts' }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+  const ui = await $.ui.mount(message('See demo-a1b2c.'))
+  await settle(clock)
+  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  const pane = await $.ui.mount(PANE)
+  await settle(clock)
+  expect(textOf(await pane.find({ key: 'desc' }))).toBe(
+    `The [design](https://github.com/acme/widgets/blob/${sha}/docs/design.md), ` +
+      'the [code](src/a.ts) and the lost.',
+  )
+  await pane.unmount()
+  await ui.unmount()
+})

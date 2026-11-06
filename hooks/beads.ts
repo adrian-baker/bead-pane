@@ -334,6 +334,36 @@ export const refUrl = (ref: string, repo: string | null): string | null => {
 
 // A Markdown link written out: `[label](url)`.
 const LINK = /\[[^\]]*\]\([^)]*\)/g
+const LINK_PARTS = /\[([^\]]*)\]\(([^)\s]*)\)/g
+
+// The links in the text that name a file rather than a web address, such as
+// `[the approach](openspec/changes/x/approach.md)`, outside code.
+export const fileLinks = (text: string): string[] => {
+  const found = new Set<string>()
+  outsideCode(text, prose => {
+    for (const m of prose.matchAll(LINK_PARTS)) {
+      const href = m[2] ?? ''
+      if (href !== '' && !/^[a-z][a-z0-9+.-]*:/i.test(href) && !href.startsWith('#')) {
+        found.add(href.replace(/#.*$/, ''))
+      }
+    }
+    return prose
+  })
+  return [...found]
+}
+
+// Rewrites each link to a file by `target`: a new address to point it at,
+// null to draw its label alone, or undefined to leave it as it is.
+export const relinkFiles = (
+  text: string,
+  target: (path: string) => string | null | undefined,
+): string =>
+  outsideCode(text, prose =>
+    prose.replace(LINK_PARTS, (whole, label: string, href: string) => {
+      const to = target(href.replace(/#.*$/, ''))
+      return to === undefined ? whole : to === null ? label : `[${label}](${to})`
+    }),
+  )
 
 // Links `PR 4503` to the pull request and `#4501` or `gh-4501` to the issue,
 // outside code and outside links already written. GitHub sends an issue's
@@ -390,15 +420,20 @@ export const iconSvg = (name: IconName): string =>
   `<path d="${ICON_PATHS[name]}"/></svg>`
 
 // The rows grouped under their parents, in the order each group first
-// appears. A row with no parent is a group of its own, so the list keeps its
-// order where nothing nests.
+// appears. Rows with no parent next to each other share a group without one,
+// so the list keeps its order where nothing nests.
 export const underParents = (
   rows: readonly Ref[],
   parentOf: (id: string) => Ref | null,
 ): { parent: Ref | null; rows: Ref[] }[] =>
   rows.reduce<{ parent: Ref | null; rows: Ref[] }[]>((groups, row) => {
     const parent = parentOf(row.id)
-    const group = parent ? groups.find(g => g.parent?.id === parent.id) : undefined
+    const last = groups[groups.length - 1]
+    const group = parent
+      ? groups.find(g => g.parent?.id === parent.id)
+      : last?.parent === null
+        ? last
+        : undefined
     return group
       ? groups.map(g => (g === group ? { ...g, rows: [...g.rows, row] } : g))
       : [...groups, { parent, rows: [row] }]
