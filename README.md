@@ -1,8 +1,8 @@
 # bead-pane
 
 A Claude Code mod for [beads](https://github.com/steveyegge/beads). Under each of Claude's
-replies that names a bead, such as `demo-g5h6.4`, it lists those beads, each with its status and title as a link. Clicking
-one opens the bead in a side pane. The pane shows:
+replies that names a bead, such as `demo-g5h6.4`, it lists those beads, each with its status and
+its title as a link. Clicking one opens the bead in a side pane. The pane shows:
 
 - the title, status, priority, type, assignee and dates
 - the beads above it, as a breadcrumb
