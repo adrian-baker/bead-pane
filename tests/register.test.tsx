@@ -686,6 +686,7 @@ test('a list all of one status offers no filter', async ($, on) => {
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   expect(await pane.find({ key: 'count-open' })).toBeFalsy()
+  expect(await pane.find({ type: 'Text', text: '0 of 14 closed' })).toBeTruthy()
   expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toHaveLength(8)
   await pane.unmount()
   await ui.unmount()

@@ -1213,6 +1213,7 @@ export const register: Register = (on, options) => {
     )
     // Every status's count, closed included, as a chip that filters to it.
     const counts = countByStatus(kids)
+    const closedCount = kids.filter(k => k.status === 'closed').length
     const children = kids.length > 0 && (
       <Box key="children" flexDirection="column" gap="xs">
         {/* Each status's count, left-aligned: links that filter on a long
@@ -1250,15 +1251,13 @@ export const register: Register = (on, options) => {
             </Box>
           ) : (
             <Text size="caption" color="subtle">
-              {kids.filter(k => k.status === 'closed').length}/{kids.length}
+              {closedCount === kids.length && kids.length > 1
+                ? `All ${kids.length} closed`
+                : `${closedCount} of ${kids.length} closed`}
             </Text>
           )}
           {Svg ? (
-            <Svg
-              key="bar"
-              alt={`${kids.filter(k => k.status === 'closed').length} of ${kids.length} closed`}
-              {...progressBar(runs)}
-            />
+            <Svg key="bar" alt={`${closedCount} of ${kids.length} closed`} {...progressBar(runs)} />
           ) : (
             <Text size="caption">
               {runs.map(([st, n]) => (
