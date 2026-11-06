@@ -13,7 +13,9 @@ pane. The pane shows:
   each status that filters the list to it, and a link to all
 
 Bead IDs in the pane are links too, so you can move through the tree from there. An ID inside
-code, such as `` `bd show demo-g5h6` ``, stays as written.
+code, such as `` `bd show demo-g5h6` ``, stays as written. In a git checkout with a GitHub
+`origin`, `PR 4503`, `#4501` and a pull request's or issue's URL link to that repository, and a
+link to a file that is only on a pushed branch goes to its copy on GitHub.
 
 `/beads`, or ▤ at the start of the breadcrumb, lists the beads this session has touched, most
 recent first. Beads it worked on come first, each with what it last did, then beads a reply only
@@ -26,9 +28,9 @@ linked. The mod adds a bead when:
 - it's open and assigned to the session's `BEADS_ACTOR`, which covers a claim made before the
   mod loaded. Without `BEADS_ACTOR` the mod skips this.
 
-The mod reads beads with `bd show --json` and `bd dep list --direction=up --json` and doesn't change them. It
-looks beads up after a message has drawn, all the IDs a draw needs in one `bd show`, and keeps
-the answers for the session. Neither the reply nor the model waits on `bd`, and the lookups use
+The mod reads beads with `bd show --json` and `bd dep list --direction=up --json` and doesn't
+change them. It looks beads up after a message has drawn, all the IDs a draw needs in one
+`bd show`, and keeps the answers for the session. Neither the reply nor the model waits on `bd`, and the lookups use
 no tokens.
 
 The pane keeps up with changes made anywhere, such as another session or a person:
