@@ -1151,7 +1151,9 @@ export const register: Register = (on, options) => {
       // Links and grey text in one row, top-aligned: both are a body line
       // tall, so their text lines up, where centring aligns their boxes.
       <Box key="trail" gap="xs" alignItems="flex-start" flexWrap="wrap">
-        {md('crumb-home', link('~home', '▤'))}
+        {/* A link's text can't be sized, and no glyph draws larger than ▤:
+            as a level-3 heading it draws at the heading's size. */}
+        {md('crumb-home', `### ${link('~home', '▤')}`)}
         {steps.flatMap(step => [
           // A drawn chevron, centred on the line as the type icons are: the
           // › glyph is small and sits at the lower case's height.
