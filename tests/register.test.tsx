@@ -556,10 +556,12 @@ test('moving to a bead not yet looked up keeps the last one until it loads', asy
   await settle(clock)
 
   await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/demo-zz11' } })
-  // Before the lookup runs, the pane still shows the bead it had.
+  // Before the lookup runs, the breadcrumb names the bead being opened, and
+  // the rest of the pane still shows the bead it had.
   expect(textOf(await pane.find({ key: 'trail' }))).toBe(
-    '[☰](https://beads.invalid/~home) › demo-a1b2c',
+    '[☰](https://beads.invalid/~home) › demo-zz11 · *opening…*',
   )
+  expect(textOf(await pane.find({ key: 'desc' }))).toContain('demo')
   expect(await pane.find({ type: 'Text', text: /Loading/ })).toBeFalsy()
   await settle(clock)
   expect(textOf(await pane.find({ key: 'trail' }))).toBe(

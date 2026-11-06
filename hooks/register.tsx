@@ -702,7 +702,11 @@ export const register: Register = (on, options) => {
     const trail = trailLabels(chain)
       .map((label, i) => (i === chain.length - 1 ? label : link(chain[i] ?? '', label)))
       .join(' › ')
-    const crumbs = `${link('~home', '☰')} › ${trail}`
+    // While the pane waits for the bead it moved to, the breadcrumb already
+    // names it, so the click shows at once and nothing below moves.
+    const crumbs = isWaiting
+      ? `${link('~home', '☰')} › ${wanted} · *opening…*`
+      : `${link('~home', '☰')} › ${trail}`
 
     const status = statusOf(bead.status)
 
