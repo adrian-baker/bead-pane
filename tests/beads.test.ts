@@ -6,6 +6,10 @@ import {
   countBubble,
   datedEntries,
   keepLineBreaks,
+  linkGitHub,
+  parseGitHubRepo,
+  refLabel,
+  refUrl,
   idsIn,
   isWork,
   linkIds,
@@ -132,4 +136,31 @@ test('dated entries need every line dated, and line breaks survive Markdown', ()
   expect(datedEntries('2026-11-06: a\nplain line')).toBeNull()
   expect(datedEntries('2026-11-06: only one')).toBeNull()
   expect(keepLineBreaks('a\nb\n\nc')).toBe('a  \nb\n\nc')
+})
+
+test('a GitHub remote gives the repository, in either form', () => {
+  expect(parseGitHubRepo('https://github.com/acme/widgets.git')).toBe('acme/widgets')
+  expect(parseGitHubRepo('git@github.com:acme/widgets.git')).toBe('acme/widgets')
+  expect(parseGitHubRepo('https://gitlab.com/acme/widgets.git')).toBeNull()
+})
+
+test('PR and issue numbers link to the repository, outside code and links', () => {
+  const linked = linkGitHub(
+    'PR 4503 fixes #4501 and gh-12. `#99` stays, as does [#7](https://x.test) and a#5.',
+    'acme/widgets',
+  )
+  expect(linked).toBe(
+    '[PR 4503](https://github.com/acme/widgets/pull/4503) fixes ' +
+      '[#4501](https://github.com/acme/widgets/issues/4501) and ' +
+      '[gh-12](https://github.com/acme/widgets/issues/12). `#99` stays, as does [#7](https://x.test) and a#5.',
+  )
+})
+
+test('an external ref reads as a PR or an issue and links where it can', () => {
+  expect(refLabel('https://github.com/acme/widgets/pull/4610')).toBe('PR 4610')
+  expect(refLabel('gh-2510')).toBe('#2510')
+  expect(refLabel('jira-ABC-1')).toBe('jira-ABC-1')
+  expect(refUrl('gh-2510', 'acme/widgets')).toBe('https://github.com/acme/widgets/issues/2510')
+  expect(refUrl('gh-2510', null)).toBeNull()
+  expect(refUrl('jira-ABC-1', 'acme/widgets')).toBeNull()
 })

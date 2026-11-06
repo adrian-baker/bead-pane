@@ -308,6 +308,54 @@ export const summarised = (kids: readonly Ref[], first: number): Ref[] => {
   return (left.length > 0 ? left : kids).slice(0, first)
 }
 
+// The `owner/name` of a GitHub repository from a git remote's URL, in its
+// https or ssh form; null for a remote that isn't on github.com.
+export const parseGitHubRepo = (remote: string): string | null => {
+  const m = remote.trim().match(/github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/)
+  return m?.[1] ?? null
+}
+
+// What a link to GitHub reads as: `PR 4610` for a pull request, `#2510` for
+// an issue, or the text as given for anything else.
+export const refLabel = (ref: string): string => {
+  const pull = ref.match(/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/)
+  if (pull) return `PR ${pull[1]}`
+  const issue = ref.match(/github\.com\/[^/]+\/[^/]+\/issues\/(\d+)/) ?? ref.match(/^gh-(\d+)$/)
+  return issue ? `#${issue[1]}` : ref
+}
+
+// Where an external ref points: the URL itself, or `gh-2510` as an issue in
+// the repository. Null when it's neither.
+export const refUrl = (ref: string, repo: string | null): string | null => {
+  if (/^https?:\/\//.test(ref)) return ref
+  const gh = ref.match(/^gh-(\d+)$/)
+  return gh && repo ? `https://github.com/${repo}/issues/${gh[1]}` : null
+}
+
+// A Markdown link written out: `[label](url)`.
+const LINK = /\[[^\]]*\]\([^)]*\)/g
+
+// Links `PR 4503` to the pull request and `#4501` or `gh-4501` to the issue,
+// outside code and outside links already written. GitHub sends an issue's
+// address on to a pull request with that number.
+export const linkGitHub = (text: string, repo: string): string =>
+  outsideCode(text, prose => {
+    let out = ''
+    let at = 0
+    const plain = (part: string) =>
+      part
+        .replace(/\bPR ?#?(\d{1,6})\b/g, (m, n) => `[${m}](https://github.com/${repo}/pull/${n})`)
+        .replace(
+          /(?<![\w/&#[])(?:#|\bgh-)(\d{1,6})\b/g,
+          (m, n) => `[${m}](https://github.com/${repo}/issues/${n})`,
+        )
+    for (const m of prose.matchAll(LINK)) {
+      out += plain(prose.slice(at, m.index)) + m[0]
+      at = m.index + m[0].length
+    }
+    return out + plain(prose.slice(at))
+  })
+
 // Each line break the writer typed stays a line break: Markdown would join
 // lines a single newline separates into one paragraph.
 export const keepLineBreaks = (text: string): string => text.replace(/([^\n])\n(?!\n)/g, '$1  \n')

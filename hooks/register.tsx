@@ -11,6 +11,10 @@ import {
   datedEntries,
   iconSvg,
   keepLineBreaks,
+  linkGitHub,
+  parseGitHubRepo,
+  refLabel,
+  refUrl,
   idsIn,
   isWork,
   linkIds,
@@ -39,7 +43,7 @@ const EXTRA_ICONS: Record<string, IconName> = {
 }
 // null: not asked yet this session.
 const setup = atom({ plugin: 'bead-pane', key: 'setup' } as const, null, {
-  shape: 'setup-1',
+  shape: 'setup-2',
 })
 // Change the tag when Lookup's or Bead's fields change.
 const beads = atom(
@@ -124,16 +128,32 @@ let asking: Promise<Setup> | null = null
 function setupOf($: EngineInterface, bd: string): Promise<Setup> {
   asking ??= (async () => {
     const ran = await runBd($, bd, ['config', 'get', 'issue_prefix'])
+    const prefix =
+      ran.kind === 'ran' && ran.result.exitCode === 0 ? parsePrefix(ran.result.stdout) : null
     const found: Setup =
       ran.kind === 'failed'
         ? { kind: 'no-bd', bd, detail: ran.detail }
-        : ran.result.exitCode === 0 && parsePrefix(ran.result.stdout) !== null
-          ? { kind: 'ready', prefix: ran.result.stdout.trim() }
+        : prefix !== null
+          ? { kind: 'ready', prefix, repo: await repoOf($) }
           : { kind: 'no-database', detail: (ran.result.stderr || ran.result.stdout).trim() }
     await update($, setup, () => found)
     return found
   })()
   return asking
+}
+
+// The GitHub repository of the session's folder, for linking PR and issue
+// numbers; null outside a git checkout or for a remote elsewhere.
+async function repoOf($: EngineInterface): Promise<string | null> {
+  try {
+    const ran = await $.process.run(['git', 'remote', 'get-url', 'origin'], {
+      timeoutMs: TIMEOUT_MS,
+    })
+    return ran.exitCode === 0 ? parseGitHubRepo(ran.stdout) : null
+  } catch {
+    // No git on this machine: the pane shows numbers without links.
+    return null
+  }
 }
 
 // From a draw: asks after it, so the draw doesn't wait on bd.
@@ -594,8 +614,11 @@ export const register: Register = (on, options) => {
     const link = (to: string, label = to) => `[${label}](${BASE}${to})`
     // An ID in prose keeps its hyphen from breaking the line (`demo-` /
     // `g5h6`): the label gets a non-breaking hyphen, the link keeps the real ID.
-    const linkify = (text: string) =>
-      keepLineBreaks(linkIds(text, prefix, ref => link(ref, ref.replace(/-/g, '‑'))))
+    const repo = found.repo
+    const linkify = (text: string) => {
+      const withBeads = linkIds(text, prefix, ref => link(ref, ref.replace(/-/g, '‑')))
+      return keepLineBreaks(repo ? linkGitHub(withBeads, repo) : withBeads)
+    }
 
     // Notes written as dated entries show each entry under its date; any other
     // text keeps the line breaks it was written with.
@@ -797,6 +820,7 @@ export const register: Register = (on, options) => {
       : `${link('~home', '☰')} › ${trail}`
 
     const status = statusOf(bead.status)
+    const refHref = bead.externalRef === '' ? null : refUrl(bead.externalRef, repo)
 
     const openBlockers = bead.blockedBy.filter(b => b.status !== 'closed')
     const doneBlockers = bead.blockedBy.length - openBlockers.length
@@ -905,20 +929,26 @@ export const register: Register = (on, options) => {
           <Text size="heading" weight="semibold">
             {bead.title}
           </Text>
-          <Text size="footnote">
-            <Text color={status.color} dimColor={bead.status === 'closed'}>
-              {GLYPH[bead.status] ?? '○'}{' '}
+          {/* Status, priority, type and assignee, then where the bead is
+              tracked elsewhere, as a link where it can be one. */}
+          <Box gap="xs" alignItems="center" flexWrap="wrap">
+            <Text size="footnote">
+              <Text color={status.color} dimColor={bead.status === 'closed'}>
+                {GLYPH[bead.status] ?? '○'}{' '}
+              </Text>
+              {status.label}
+              {bead.priority !== null && <Text color="subtle">{'  ·  '}</Text>}
+              {bead.priority !== null && (
+                <Text color={priorityColor(bead.priority)}>P{bead.priority}</Text>
+              )}
+              {bead.type !== '' && <Text color="subtle">{'  ·  '}</Text>}
+              {bead.type !== '' && bead.type.replace(/^./, c => c.toUpperCase())}
+              <Text color="subtle">{'  ·  '}</Text>
+              {bead.assignee ? bead.assignee : <Text color="subtle">Unassigned</Text>}
             </Text>
-            {status.label}
-            {bead.priority !== null && <Text color="subtle">{'  ·  '}</Text>}
-            {bead.priority !== null && (
-              <Text color={priorityColor(bead.priority)}>P{bead.priority}</Text>
-            )}
-            {bead.type !== '' && <Text color="subtle">{'  ·  '}</Text>}
-            {bead.type !== '' && bead.type.replace(/^./, c => c.toUpperCase())}
-            <Text color="subtle">{'  ·  '}</Text>
-            {bead.assignee ? bead.assignee : <Text color="subtle">Unassigned</Text>}
-          </Text>
+            {refHref !== null && <Text color="subtle">·</Text>}
+            {refHref !== null && md('ref', `[${refLabel(bead.externalRef)}](${refHref})`)}
+          </Box>
           {/* When it last changed, then where else it's tracked and its labels. */}
           <Text size="caption" color="subtle">
             {[
@@ -926,7 +956,7 @@ export const register: Register = (on, options) => {
                 ? `Closed ${ago(bead.closedMs, nowMs)}`
                 : `Updated ${ago(bead.updatedMs, nowMs)}`,
               `created ${ago(bead.createdMs, nowMs)}`,
-              bead.externalRef,
+              refHref === null ? bead.externalRef : '',
               ...bead.labels,
             ]
               .filter(part => part !== '')

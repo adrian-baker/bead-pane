@@ -54,7 +54,8 @@ export type How =
 
 // What asking bd for the project's ID prefix found.
 export type Setup =
-  | { kind: 'ready'; prefix: string }
+  // `repo` is the GitHub `owner/name` from the session's git remote, if any.
+  | { kind: 'ready'; prefix: string; repo: string | null }
   // bd didn't start, or didn't answer in time.
   | { kind: 'no-bd'; bd: string; detail: string }
   // bd ran but found no beads database from the session's folder.

@@ -674,3 +674,37 @@ test('dated notes show each entry under its date', async ($, on) => {
   await pane.unmount()
   await ui.unmount()
 })
+
+test('PR and issue numbers in a bead link to its GitHub repository', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  on(
+    'process.run',
+    fakeBd({
+      remote: 'git@github.com:acme/widgets.git',
+      beads: {
+        'demo-a1b2c': row('demo-a1b2c', {
+          description: 'PR 4503 fixes #4501.',
+          external_ref: 'https://github.com/acme/widgets/pull/4610',
+        }),
+      },
+    }),
+  )
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+  const ui = await $.ui.mount(message('See demo-a1b2c.'))
+  await settle(clock)
+  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  const pane = await $.ui.mount(PANE)
+  await settle(clock)
+  expect(textOf(await pane.find({ key: 'desc' }))).toBe(
+    '[PR 4503](https://github.com/acme/widgets/pull/4503) fixes [#4501](https://github.com/acme/widgets/issues/4501).',
+  )
+  expect(textOf(await pane.find({ key: 'ref' }))).toBe(
+    '[PR 4610](https://github.com/acme/widgets/pull/4610)',
+  )
+  await pane.unmount()
+  await ui.unmount()
+})

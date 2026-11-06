@@ -50,6 +50,8 @@ export type FakeBd = {
   children?: Record<string, Record<string, unknown>[]>
   comments?: Record<string, Record<string, unknown>[]>
   assigned?: Record<string, unknown>[]
+  // What `git remote get-url origin` prints; not a git checkout when absent.
+  remote?: string
   // The Dolt folder `bd info` reports; none when absent.
   databasePath?: string
   // Every argument vector the mod ran, in order.
@@ -64,10 +66,14 @@ export const fakeBd =
     comments = {},
     assigned = [],
     databasePath,
+    remote,
     ran = [],
   }: FakeBd) =>
   (_: unknown, e: { argv: readonly string[] }): Answer => {
     ran.push(e.argv)
+    if (e.argv[0] === 'git') {
+      return remote ? answer(0, `${remote}\n`) : answer(128, '', 'fatal: not a git repository')
+    }
     const [, verb = '', ...rest] = e.argv
     if (verb === 'config') return answer(0, `${prefix}\n`)
     if (verb === 'children') return answer(0, children[rest[0] ?? ''] ?? [])
