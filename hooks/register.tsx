@@ -124,12 +124,14 @@ const pulse = atom({ plugin: 'bead-pane', key: 'pulse' } as const, 0, { shape: '
 // One glyph per status, from empty to full as work moves on, drawn in the
 // status colour. The header and every list use the same glyph. Closed's green
 // is drawn dim everywhere, so open and in-progress beads stand out.
+// Each the size of the others in the system font: ⊘ and ◌ come from fonts
+// that draw them smaller or larger.
 const GLYPH: Record<string, string> = {
   open: '○',
   in_progress: '◐',
-  blocked: '⊘',
+  blocked: '⊗',
   closed: '●',
-  deferred: '◌',
+  deferred: '⊖',
 }
 
 const STATUS: Record<string, { label: string; color: string }> = {
@@ -841,7 +843,7 @@ export const register: Register = (on, options) => {
       // and in a list that mixes types. In one of tasks alone it says nothing.
       const showsTypes = withTypes || new Set(refs.flatMap(r => (r.type ? [r.type] : []))).size > 1
       const typeOf = (r: Ref) => {
-        const icon = Svg && r.type ? typeIcon(r.type, 12, 0, 0.7) : null
+        const icon = Svg && r.type ? typeIcon(r.type, 14, 0, 0.7) : null
         // An image, not an interactive frame: a frame loads after its row, so
         // rows a filter brings back would draw their icons a beat late.
         return Svg && icon && <Svg key={`${rowKey}-${r.id}-type`} alt={r.type ?? ''} {...icon} />
@@ -926,18 +928,15 @@ export const register: Register = (on, options) => {
                   )}
                 </Box>
               )}
-              {/* A zero-width character makes the slot one line tall, so the
-                  icon centres on the title's first line. */}
+              {/* The slot stretches with a wrapped row, so the icon sits in a
+                  box at its top that a zero-width character makes one line
+                  tall: it centres on the title's first line. */}
               {Svg && showsTypes && (
-                <Box
-                  width={2}
-                  flexShrink={0}
-                  alignItems="center"
-                  justifyContent="center"
-                  alignSelf="flex-start"
-                >
-                  {typeOf(r)}
-                  <Text>{'​'}</Text>
+                <Box width={2} flexShrink={0} flexDirection="column">
+                  <Box alignItems="center" justifyContent="center">
+                    {typeOf(r)}
+                    <Text>{'​'}</Text>
+                  </Box>
                 </Box>
               )}
               <Box flexGrow={1} flexShrink={1}>
@@ -1182,7 +1181,7 @@ export const register: Register = (on, options) => {
     const isBlocked = bead.blockedBy.some(b => b.status !== 'closed')
     // Centred on the title's line, the icon centres on the capitals, a
     // little taller than they are.
-    const titleIcon = typeIcon(bead.type, 16, 0, 1, true)
+    const titleIcon = typeIcon(bead.type, 18, 0, 1, true)
 
     // Children whose IDs nest under this bead's come first, in ID order, so
     // they set the ID column; a child filed elsewhere comes after them.

@@ -223,9 +223,9 @@ test('a long list of children is summarised until opened', async ($, on) => {
   // The bar is 20 cells: 15 closed, 2 in progress, 3 open.
   const bar = (await pane.findAll({ type: 'Svg' }))
     .map(s => String((s.props as { source?: unknown }).source))
-    .find(src => src.includes('clipPath'))
-  expect(bar).toContain('width="120"')
-  expect(bar).toContain('width="24"')
+    .find(src => src.includes('preserveAspectRatio'))
+  expect(bar).toContain('width="750"')
+  expect(bar).toContain('width="150"')
   expect(textOf(await pane.find({ key: 'all' }))).toContain('Show all 20')
   // A status count narrows the list to that status, and pressing it again clears it.
   await pressChip('open')
