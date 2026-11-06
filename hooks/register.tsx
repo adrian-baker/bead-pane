@@ -63,15 +63,17 @@ const branchSvg = (isLast: boolean): string =>
 const STEM_HEIGHT = 400
 const STEM_SVG =
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${BRANCH_WIDTH} ${STEM_HEIGHT}" ` +
-  `fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5">` +
-  `<path d="M6 ${BRANCH_HEIGHT}V${STEM_HEIGHT}"/></svg>`
+  `preserveAspectRatio="none" fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5">` +
+  `<path d="M6 ${BRANCH_HEIGHT}V${STEM_HEIGHT}" vector-effect="non-scaling-stroke"/></svg>`
 
-// The branch's arm on to the child's ID, longer than any ID column.
+// The branch's arm on to the child's ID, longer than any ID column. A
+// desktop shrinks it to its box, so it stretches out of proportion and keeps
+// its line's width, rather than thinning to a hairline.
 const ARM_WIDTH = 400
 const ARM_SVG =
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${ARM_WIDTH} ${BRANCH_HEIGHT}" ` +
-  `fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5">` +
-  `<path d="M0 ${BRANCH_HEIGHT / 2}H${ARM_WIDTH}"/></svg>`
+  `preserveAspectRatio="none" fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5">` +
+  `<path d="M0 ${BRANCH_HEIGHT / 2}H${ARM_WIDTH}" vector-effect="non-scaling-stroke"/></svg>`
 
 const EXTRA_ICONS: Record<string, IconName> = {
   Notes: 'notes',
@@ -795,7 +797,9 @@ export const register: Register = (on, options) => {
     // and the title as the link. A closed bead's title isn't dimmed, because
     // dim link blue on a dark background is hard to read. Children show only
     // their own `.n`, since the parent's ID is in the breadcrumb.
-    // `spaced` puts a little room between rows, for a list read one bead at a time.
+    // `spaced` puts room under each row, for a list read one bead at a time.
+    // It is in the row's ID cell, which stretches over it, so a tree's lines
+    // run through it to the next row.
     const list = (
       key: string,
       refs: Ref[],
@@ -830,7 +834,7 @@ export const register: Register = (on, options) => {
         return Svg && icon && <Svg key={`${rowKey}-${r.id}-type`} alt={r.type ?? ''} {...icon} />
       }
       return (
-        <Box key={key} flexDirection="column" gap={spaced && !isBranch ? 'xs' : undefined}>
+        <Box key={key} flexDirection="column">
           {refs.map((r, i) => (
             // Stretched, so the ID cell is as tall as a title that wraps.
             <Box key={`${rowKey}-${r.id}`} gap="xs" alignItems="stretch">
@@ -846,6 +850,7 @@ export const register: Register = (on, options) => {
                 // Stretched to the row, a Box centres what it holds on a
                 // desktop: the ID, branch and priority stay on the first line.
                 alignItems="flex-start"
+                {...(spaced ? { paddingBottom: 'sm' as const } : {})}
                 {...(Svg && (hasStem || (isBranch && i < refs.length - 1))
                   ? { overflow: 'hidden' as const }
                   : {})}
@@ -1017,7 +1022,7 @@ export const register: Register = (on, options) => {
       ) => {
         const shown = groupsOf(rows)
         return (
-          <Box key={key} flexDirection="column" gap="md">
+          <Box key={key} flexDirection="column" gap="sm">
             {shown.map(group =>
               group.parent === null ? (
                 list(
@@ -1037,7 +1042,7 @@ export const register: Register = (on, options) => {
                     [group.parent],
                     '',
                     rowNotes,
-                    false,
+                    true,
                     key,
                     false,
                     topWidth,
@@ -1049,7 +1054,7 @@ export const register: Register = (on, options) => {
                     group.rows,
                     group.parent.id,
                     rowNotes,
-                    false,
+                    true,
                     key,
                     true,
                     topWidth,
