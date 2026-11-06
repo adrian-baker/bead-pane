@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, ProcessRunResult, Register, RenderChildren } from 'claude-code'
 
 import type { Lookup, Ref, Setup } from '../types'
-import type { IconName } from './beads'
+import type { IconName, RefState } from './beads'
 import {
   ago,
   barRuns,
@@ -14,6 +14,8 @@ import {
   keepLineBreaks,
   linkGitHub,
   parseGitHubRepo,
+  githubTarget,
+  parseRefState,
   refLabel,
   refUrl,
   idsIn,
@@ -172,6 +174,46 @@ function ensureSetup($: EngineInterface, bd: string): void {
 // commit that has it, or null when none does. Each asked once per load.
 const fileExists = new Map<string, boolean>()
 const fileElsewhere = new Map<string, string | null>()
+
+// Each GitHub link's state, as the pane last asked `gh`; null when `gh` gave
+// none, such as when it isn't installed or signed in. Asked once per load,
+// after the draw: one call per link the pane shows, well inside GitHub's
+// limit of 5,000 an hour for a signed-in user.
+const refStates = new Map<string, RefState | null>()
+
+function askRefState($: EngineInterface, url: string): void {
+  refStates.set(url, null)
+  $.clock.after(0, () => {
+    lookRefState($, url).catch(err => logFailure($, 'asking GitHub for a state', err))
+  })
+}
+
+async function lookRefState($: EngineInterface, url: string): Promise<void> {
+  const target = githubTarget(url)
+  if (!target) return
+  const ran = await $.process.run(
+    [
+      'gh',
+      'api',
+      `repos/${target.repo}/issues/${target.number}`,
+      '--jq',
+      '{state, draft, merged: .pull_request.merged_at}',
+    ],
+    { timeoutMs: TIMEOUT_MS },
+  )
+  const state = ran.exitCode === 0 ? parseRefState(ran.stdout) : null
+  if (state === null) return
+  refStates.set(url, state)
+  await update($, pulse, n => n + 1)
+}
+
+// GitHub's colours for each state, from the theme.
+const REF_STATE: Record<RefState, { color: string; label: string }> = {
+  open: { color: 'success', label: 'open' },
+  draft: { color: 'subtle', label: 'draft' },
+  merged: { color: 'merged', label: 'merged' },
+  closed: { color: 'error', label: 'closed' },
+}
 
 // Finds a file missing from the session's folder on the branches pushed to
 // origin, such as a design on an open pull request's branch, after the draw.
@@ -962,6 +1004,10 @@ export const register: Register = (on, options) => {
 
     const status = statusOf(bead.status)
     const refHref = bead.externalRef === '' ? null : refUrl(bead.externalRef, repo)
+    if (refHref !== null && githubTarget(refHref) && !refStates.has(refHref)) {
+      askRefState($, refHref)
+    }
+    const refState = refHref === null ? null : (refStates.get(refHref) ?? null)
 
     const openBlockers = bead.blockedBy.filter(b => b.status !== 'closed')
     const doneBlockers = bead.blockedBy.length - openBlockers.length
@@ -1088,7 +1134,17 @@ export const register: Register = (on, options) => {
               {bead.assignee ? bead.assignee : <Text color="subtle">Unassigned</Text>}
             </Text>
             {refHref !== null && <Text color="subtle">·</Text>}
+            {refHref !== null && refState && (
+              <Text size="footnote" color={REF_STATE[refState].color}>
+                ●
+              </Text>
+            )}
             {refHref !== null && md('ref', `[${refLabel(bead.externalRef)}](${refHref})`)}
+            {refHref !== null && refState && (
+              <Text size="footnote" color="subtle">
+                {REF_STATE[refState].label}
+              </Text>
+            )}
           </Box>
           {/* When it last changed, then where else it's tracked and its labels. */}
           <Text size="caption" color="subtle">

@@ -339,6 +339,25 @@ export const refUrl = (ref: string, repo: string | null): string | null => {
   return gh && repo ? `https://github.com/${repo}/issues/${gh[1]}` : null
 }
 
+// Where a GitHub link points: its repository and the issue or PR number.
+export const githubTarget = (url: string): { repo: string; number: number } | null => {
+  const m = url.match(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/(?:pull|issues)\/(\d+)/)
+  return m?.[1] && m[2] ? { repo: m[1], number: Number(m[2]) } : null
+}
+
+export type RefState = 'open' | 'draft' | 'merged' | 'closed'
+
+// `gh api repos/<repo>/issues/<n>`, narrowed by `--jq` to the fields below:
+// the endpoint answers for an issue or a pull request, and a PR's merge time.
+export const parseRefState = (stdout: string): RefState | null => {
+  const row = json(stdout)
+  if (!isRow(row)) return null
+  if (typeof row.merged === 'string' && row.merged !== '') return 'merged'
+  if (row.state === 'closed') return 'closed'
+  if (row.state === 'open') return row.draft === true ? 'draft' : 'open'
+  return null
+}
+
 // A Markdown link written out: `[label](url)`.
 const LINK = /\[[^\]]*\]\([^)]*\)/g
 const LINK_PARTS = /\[([^\]]*)\]\(([^)\s]*)\)/g
