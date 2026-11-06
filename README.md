@@ -9,7 +9,8 @@ pane. The pane shows:
 - its open blockers
 - the description, notes, design, acceptance criteria, spec and close reason
 - its comments, its labels and where else it's tracked, such as `gh-2510`
-- its children, with a bar coloured by status; past 12, the ones still open, and a link to all
+- its children, with a bar coloured by status. Past 12, it shows the ones still open, a count of
+  each status that filters the list to it, and a link to all
 
 Bead IDs in the pane are links too, so you can move through the tree from there. An ID inside
 code, such as `` `bd show demo-g5h6` ``, stays as written.

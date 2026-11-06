@@ -67,6 +67,8 @@ declare module 'claude-code' {
       beads: Shaped<Record<string, Lookup>>
       selected: Shaped<string | null>
       expanded: Shaped<string | null>
+      // The one status a bead's long list of children is narrowed to, if any.
+      only: Shaped<{ id: string; status: string } | null>
       touched: Shaped<Record<string, { how: How; atMs: number }>>
       // Counts the mod's refreshes. The pane reads it, so a refresh redraws an
       // open pane even when nothing changed, and a closed pane doesn't draw.

@@ -50,6 +50,8 @@ const selected = atom({ plugin: 'bead-pane', key: 'selected' } as const, null, {
 const expanded = atom({ plugin: 'bead-pane', key: 'expanded' } as const, null, {
   shape: 'expanded-1',
 })
+// Kept per bead, so moving to another one leaves its list unfiltered.
+const only = atom({ plugin: 'bead-pane', key: 'only' } as const, null, { shape: 'only-1' })
 
 // The beads this session has touched, by ID: what it last did to each and when.
 const touched = atom(
@@ -522,10 +524,17 @@ export const register: Register = (on, options) => {
       poll($, bd)
     }
     const isExpanded = (await read($, expanded)) === id
+    const narrowed = await read($, only)
+    const onlyStatus = narrowed !== null && narrowed.id === id ? narrowed.status : null
     // Every link in the pane is Markdown, so one handler serves them all.
     const press = async (href: string) => {
       const target = href.slice(BASE.length)
       if (target === '~all') return update($, expanded, v => (v === id ? null : id))
+      // A status count narrows the children to that status; pressed again, it clears.
+      if (target.startsWith('~only:') && id !== null) {
+        const status = target.slice('~only:'.length)
+        return update($, only, v => (v?.id === id && v.status === status ? null : { id, status }))
+      }
       if (target === '~home') return update($, selected, () => null)
       // Selected first, so the lookup fetches its comments.
       await update($, selected, () => target)
@@ -691,7 +700,12 @@ export const register: Register = (on, options) => {
     const LONG = 12
     const FIRST = 8
     const isLong = kids.length > LONG
-    const shown = isLong && !isExpanded ? summarised(kids, FIRST) : kids
+    const shown =
+      onlyStatus !== null
+        ? kids.filter(k => k.status === onlyStatus)
+        : isLong && !isExpanded
+          ? summarised(kids, FIRST)
+          : kids
     const counts = countByStatus(kids).filter(([st]) => st !== 'closed')
     const children = kids.length > 0 && (
       <Box key="children" flexDirection="column" gap="xs">
@@ -712,16 +726,26 @@ export const register: Register = (on, options) => {
         </Box>
         {isLong && counts.length > 0 && (
           <Box gap="md" flexWrap="wrap">
-            {counts.map(([st, n]) => (
-              <Text key={`count-${st}`} size="footnote">
-                <Text color={statusOf(st).color}>{GLYPH[st] ?? '○'} </Text>
-                {n} {statusOf(st).label.toLowerCase()}
-              </Text>
-            ))}
+            {counts.map(([st, n]) => {
+              const label = `${n} ${statusOf(st).label.toLowerCase()}`
+              return (
+                <Box key={`count-${st}`} gap="xs" alignItems="center">
+                  <Text size="footnote" color={statusOf(st).color}>
+                    {GLYPH[st] ?? '○'}
+                  </Text>
+                  {md(
+                    `count-${st}-link`,
+                    link(`~only:${st}`, st === onlyStatus ? `**${label}**` : label),
+                  )}
+                </Box>
+              )
+            })}
           </Box>
         )}
         {list('kids', shown, id)}
-        {isLong && md('all', link('~all', isExpanded ? 'Show fewer' : `Show all ${kids.length}`))}
+        {isLong &&
+          onlyStatus === null &&
+          md('all', link('~all', isExpanded ? 'Show fewer' : `Show all ${kids.length}`))}
       </Box>
     )
 

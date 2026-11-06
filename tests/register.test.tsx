@@ -166,10 +166,17 @@ test('a long list of children is summarised until opened', async ($, on) => {
     [16, 17, 18, 19, 20].map(n => `kids-demo-epic1.${n}`),
   )
   expect(await pane.find({ type: 'Text', text: /^15\/20$/ })).toBeTruthy()
-  expect(await pane.find({ type: 'Text', text: /5 open/ })).toBeTruthy()
+  expect(textOf(await pane.find({ key: 'count-open-link' }))).toContain('5 open')
   // The bar is 20 cells: 15 closed, then 5 open.
   expect(await pane.find({ type: 'Text', text: /^━{15}$/ })).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: /^━{5}$/ })).toBeTruthy()
+  expect(textOf(await pane.find({ key: 'all' }))).toContain('Show all 20')
+  // A status count narrows the list to that status, and pressing it again clears it.
+  await pane.press({ key: 'count-open-link', link: { href: 'https://beads.invalid/~only:open' } })
+  expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toHaveLength(5)
+  expect(textOf(await pane.find({ key: 'count-open-link' }))).toContain('**5 open**')
+  expect(await pane.find({ key: 'all' })).toBeFalsy()
+  await pane.press({ key: 'count-open-link', link: { href: 'https://beads.invalid/~only:open' } })
   expect(textOf(await pane.find({ key: 'all' }))).toContain('Show all 20')
   await pane.press({ key: 'all', link: { href: 'https://beads.invalid/~all' } })
   expect(await rows()).toBe(20)
