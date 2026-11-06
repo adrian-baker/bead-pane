@@ -178,12 +178,22 @@ const REMEMBERED_MAX = 2000
 type Remembered = { setup: Setup | null; ids: string[] }
 const storeKey = (folder: string) => `project:${folder}`
 
-async function recall($: EngineInterface, folder: string): Promise<void> {
+async function recall($: EngineInterface): Promise<void> {
+  const folder = await $.session.cwd()
   projectKey = folder
   const stored = (await $.store.get(storeKey(folder))) as Partial<Remembered> | undefined
   if (Array.isArray(stored?.ids)) {
     remembered = new Set(stored.ids.filter((id): id is string => typeof id === 'string'))
   }
+  // The beads this session already found, as after a reload, which looks
+  // none up again; saved after the draw.
+  $.clock.after(0, async () => {
+    const known = await read($, beads)
+    const found = Object.keys(known).filter(id => known[id]?.kind === 'found')
+    if (found.length > 0) {
+      await remember($, { found }).catch(err => logFailure($, 'remembering beads', err))
+    }
+  })
   const was = stored?.setup
   if (was?.kind === 'ready' && typeof was.prefix === 'string' && (await read($, setup)) === null) {
     await update($, setup, () => was)
@@ -543,6 +553,10 @@ export const register: Register = (on, options) => {
       : 'bd'
 
   on('session.start', async ($, e, next) => {
+    // At every start and reload, before the transcript draws.
+    await recall($).catch(err => logFailure($, 'recalling the project', err))
+    // bd is asked again after the draw, in case the setup changed.
+    ensureSetup($, bd)
     await $.command.register({
       name: 'beads',
       description: 'Show the beads this session has claimed or worked on',
@@ -556,9 +570,6 @@ export const register: Register = (on, options) => {
   // session shows at its next start: reading it on each prompt would add
   // work to every prompt. The lookup runs after the event.
   on('classic.SessionStart', async ($, e, next) => {
-    await recall($, e.cwd).catch(err => logFailure($, 'recalling the project', err))
-    // bd is asked again after the draw, in case the setup changed.
-    ensureSetup($, bd)
     const title = e.session_title
     if (title)
       $.clock.after(0, () => {

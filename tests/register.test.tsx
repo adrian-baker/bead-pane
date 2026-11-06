@@ -739,13 +739,15 @@ test('a resumed session links the beads an earlier one found before bd answers',
     await clock.sleep(1000)
     return healthy(_, e)
   })
-  on('classic.SessionStart', () => ({}))
+  on('session.cwd', () => ({ value: '/work/demo' }))
+  on('session.start', () => ({ cwd: '/work/demo' }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
     const { Markdown } = $.ui.resolve(e)
     return <Markdown text={e.props.text} />
   })
 
-  await $.classic.SessionStart({ source: 'resume', cwd: '/work/demo' })
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work/demo' })
   // The first draw is already linked, so it's the last.
   const ui = await $.ui.mount(message('See demo-a1b2c.'))
   expect(textOf(await ui.find({ type: 'Markdown' }))).toBe(
