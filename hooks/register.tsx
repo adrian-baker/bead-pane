@@ -816,6 +816,7 @@ export const register: Register = (on, options) => {
       width: number | null = null,
       isBranch = false,
       hasStem = false,
+      withTypes = false,
     ) => {
       const shortOf = (r: Ref) =>
         parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
@@ -829,9 +830,10 @@ export const register: Register = (on, options) => {
       // titles line up.
       const hasPriority = refs.some(r => r.priority !== undefined)
       const align = isRightAligned ? 'flex-end' : 'flex-start'
-      // Each row's type icon, smaller and fainter than the title's, only in
-      // a list that mixes types: in one of tasks alone it would say nothing.
-      const showsTypes = new Set(refs.flatMap(r => (r.type ? [r.type] : []))).size > 1
+      // Each row's type icon, smaller and fainter than the title's: in the
+      // pane's own list, whose groups all show it so their titles line up,
+      // and in a list that mixes types. In one of tasks alone it says nothing.
+      const showsTypes = withTypes || new Set(refs.flatMap(r => (r.type ? [r.type] : []))).size > 1
       const typeOf = (r: Ref) => {
         const icon = Svg && r.type ? typeIcon(r.type, 12, 0, 0.7) : null
         // An image, not an interactive frame: a frame loads after its row, so
@@ -968,6 +970,7 @@ export const register: Register = (on, options) => {
               ...(bead?.priority !== null && bead?.priority !== undefined
                 ? { priority: bead.priority }
                 : {}),
+              ...(bead?.type ? { type: bead.type } : {}),
             },
           ]
         })
@@ -1039,6 +1042,9 @@ export const register: Register = (on, options) => {
                   key,
                   false,
                   topWidth,
+                  false,
+                  false,
+                  true,
                 )
               ) : (
                 <Box key={`${key}-under-${group.parent.id}`} flexDirection="column">
@@ -1053,6 +1059,7 @@ export const register: Register = (on, options) => {
                     topWidth,
                     false,
                     group.rows.length > 0,
+                    true,
                   )}
                   {list(
                     `${key}-group-${group.parent.id}`,
@@ -1063,6 +1070,8 @@ export const register: Register = (on, options) => {
                     key,
                     true,
                     topWidth,
+                    true,
+                    false,
                     true,
                   )}
                 </Box>
