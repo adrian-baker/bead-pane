@@ -1308,8 +1308,8 @@ export const register: Register = (on, options) => {
               tracked elsewhere, as a link where it can be one. */}
             <Box gap="xs" alignItems="center" flexWrap="wrap">
               <Text size="footnote">
-                {/* The status's glyph at body size, so it leads the row. */}
-                <Text size="body" color={status.color} dimColor={bead.status === 'closed'}>
+                {/* The status's glyph at heading size, so it leads the row. */}
+                <Text size="heading" color={status.color} dimColor={bead.status === 'closed'}>
                   {GLYPH[bead.status] ?? '○'}
                 </Text>{' '}
                 {status.label}
