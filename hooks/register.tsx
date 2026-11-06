@@ -66,6 +66,13 @@ const STEM_SVG =
   `fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5">` +
   `<path d="M6 ${BRANCH_HEIGHT}V${STEM_HEIGHT}"/></svg>`
 
+// The branch's arm on to the child's ID, longer than any ID column.
+const ARM_WIDTH = 400
+const ARM_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${ARM_WIDTH} ${BRANCH_HEIGHT}" ` +
+  `fill="none" stroke="${BRANCH_COLOUR}" stroke-width="1.5">` +
+  `<path d="M0 ${BRANCH_HEIGHT / 2}H${ARM_WIDTH}"/></svg>`
+
 const EXTRA_ICONS: Record<string, IconName> = {
   Notes: 'notes',
   Design: 'design',
@@ -870,6 +877,19 @@ export const register: Register = (on, options) => {
                   ) : (
                     <Text color="subtle">{i === refs.length - 1 ? '└' : '├'}</Text>
                   ))}
+                {/* The branch's arm runs on to the ID, however short the ID:
+                    drawn long and clipped by a box that takes the room left. */}
+                {isBranch && Svg && (
+                  <Box flexGrow={1} flexShrink={1} width={0} overflow="hidden" marginRight="xs">
+                    <Svg
+                      key={`${rowKey}-${r.id}-arm`}
+                      alt="─"
+                      width={ARM_WIDTH}
+                      height={BRANCH_HEIGHT}
+                      source={ARM_SVG}
+                    />
+                  </Box>
+                )}
                 <Text color="subtle">{shortOf(r)}</Text>
               </Box>
               <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
