@@ -210,12 +210,11 @@ test('a long list of children is summarised until opened', async ($, on) => {
   // A status count narrows the list to that status, and pressing it again clears it.
   await pressChip('open')
   expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toHaveLength(3)
-  // The others dim, so the row keeps its widths, and Clear joins its end.
+  // The others dim, so the row keeps its widths.
   const dimOf = async (st: string) =>
     (await pane.find({ key: `count-${st}` }))?.props as { dimColor?: boolean } | undefined
   expect((await dimOf('closed'))?.dimColor).toBe(true)
   expect((await dimOf('open'))?.dimColor).toBe(false)
-  expect(textOf(await pane.find({ key: 'clear' }))).toContain('Clear')
   expect(await pane.find({ key: 'all' })).toBeFalsy()
   await pressChip('open')
   expect(textOf(await pane.find({ key: 'all' }))).toContain('Show all 20')

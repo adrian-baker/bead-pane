@@ -1131,8 +1131,7 @@ export const register: Register = (on, options) => {
                 // A link per status after its coloured glyph: a desktop's
                 // native button has no small size, and outweighed the
                 // title. With one on, the others dim, so nothing changes
-                // width and the row stays put; pressing it again clears it,
-                // as does Clear at the row's end.
+                // width and the row stays put; pressing it again clears it.
                 const isDim = onlyStatus !== null && st !== onlyStatus
                 return (
                   <Box key={`chip-${st}`} gap="xs" alignItems="center">
@@ -1153,7 +1152,6 @@ export const register: Register = (on, options) => {
                   </Box>
                 )
               })}
-              {onlyStatus !== null && md('clear', link(`~only:${onlyStatus}`, 'Clear'))}
             </Box>
           ) : (
             <Text size="caption" color="subtle">
