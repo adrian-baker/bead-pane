@@ -531,3 +531,40 @@ test("the pane shows a bead's labels, external ref, spec and comments", async ($
   await pane.unmount()
   await ui.unmount()
 })
+
+test('moving to a bead not yet looked up keeps the last one until it loads', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  on(
+    'process.run',
+    fakeBd({
+      beads: {
+        'demo-a1b2c': row('demo-a1b2c', { description: 'See demo-zz11.' }),
+        'demo-zz11': row('demo-zz11'),
+      },
+    }),
+  )
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+
+  const ui = await $.ui.mount(message('See demo-a1b2c.'))
+  await settle(clock)
+  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })
+  const pane = await $.ui.mount(PANE)
+  await settle(clock)
+
+  await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/demo-zz11' } })
+  // Before the lookup runs, the pane still shows the bead it had.
+  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
+    '[☰](https://beads.invalid/~home) › demo-a1b2c',
+  )
+  expect(await pane.find({ type: 'Text', text: /Loading/ })).toBeFalsy()
+  await settle(clock)
+  expect(textOf(await pane.find({ key: 'trail' }))).toBe(
+    '[☰](https://beads.invalid/~home) › demo-zz11',
+  )
+  await pane.unmount()
+  await ui.unmount()
+})

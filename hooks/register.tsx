@@ -269,6 +269,8 @@ let isRefreshPending = false
 // reads `pulse`, so an open pane draws after each bump. A pane that hasn't
 // drawn since the last bump is closed, and a refresh then skips its lookup.
 let lastDrawMs = 0
+// The last bead the pane drew in full.
+let lastShown: string | null = null
 let lastPulseMs = 0
 const POLL_MS = 5000
 // Writes within this much of each other share one lookup.
@@ -512,8 +514,17 @@ export const register: Register = (on, options) => {
       )
     }
     const prefix = found.prefix
-    const id = await read($, selected)
     const all = await read($, beads)
+    const wanted = await read($, selected)
+    // While the bead the pane moved to is looked up, it keeps drawing the one
+    // it showed, so it switches once instead of flashing "Loading…".
+    const isWaiting =
+      wanted !== null &&
+      all[wanted] === undefined &&
+      lastShown !== null &&
+      all[lastShown]?.kind === 'found'
+    if (wanted !== null && all[wanted] === undefined) ensure($, bd, [wanted])
+    const id = isWaiting ? lastShown : wanted
 
     const nowMs = await $.clock.now()
     await read($, pulse)
@@ -579,17 +590,24 @@ export const register: Register = (on, options) => {
         parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
       // The ID column is as wide as the longest ID in this list and no wider:
       // `.1`–`.7` take two cells, a list that reaches `.178` takes four.
-      const idWidth = Math.max(...refs.map(r => shortOf(r).length))
+      // The ID sits right against the glyph. The desktop's digits are
+      // narrower than the cells the column is measured in, so the column's
+      // slack is the space between them; the terminal's are a full cell, so
+      // the column gets one more.
+      const idWidth =
+        Math.max(...refs.map(r => shortOf(r).length)) + (e.surface === 'terminal' ? 1 : 0)
       return (
         <Box key={key} flexDirection="column">
           {refs.map(r => (
             <Box key={`${key}-${r.id}`} gap="xs" alignItems="flex-start">
-              <Box width={idWidth} flexShrink={0}>
-                <Text color="subtle">{shortOf(r)}</Text>
+              <Box flexShrink={0}>
+                <Box width={idWidth}>
+                  <Text color="subtle">{shortOf(r)}</Text>
+                </Box>
+                <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
+                  {GLYPH[r.status] ?? '○'}
+                </Text>
               </Box>
-              <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
-                {GLYPH[r.status] ?? '○'}
-              </Text>
               <Box flexGrow={1} flexShrink={1}>
                 {md(`${key}-${r.id}-title`, link(r.id, r.title || r.id))}
               </Box>
@@ -657,6 +675,7 @@ export const register: Register = (on, options) => {
       )
     }
     const bead = entry.bead
+    lastShown = id
     // A bead opened from a reply was looked up before it was shown, without
     // its comments: ask again, once.
     if (bead.commentCount > 0 && bead.comments === null && !commentsAsked.has(id)) {
@@ -706,6 +725,13 @@ export const register: Register = (on, options) => {
         : isLong && !isExpanded
           ? summarised(kids, FIRST)
           : kids
+    // The children on screen are looked up now, in the same `bd show` as the
+    // blockers, so opening one is usually instant.
+    ensure(
+      $,
+      bd,
+      shown.flatMap(k => (k.id in all ? [] : [k.id])),
+    )
     const counts = countByStatus(kids).filter(([st]) => st !== 'closed')
     const children = kids.length > 0 && (
       <Box key="children" flexDirection="column" gap="xs">
@@ -812,24 +838,22 @@ export const register: Register = (on, options) => {
           section(`extra-${x.label}`, x.label, md(`text-${x.label}`, linkify(x.text))),
         )}
         {bead.specId !== '' && section('spec', 'Spec', <Text>{bead.specId}</Text>)}
-        {bead.commentCount > 0 &&
+        {/* Drawn once the comments are in, so the section doesn't flash. */}
+        {bead.comments !== null &&
+          bead.comments.length > 0 &&
           section(
             'comments',
-            `Comments ${bead.commentCount}`,
-            bead.comments === null ? (
-              <Text color="subtle">Loading…</Text>
-            ) : (
-              <Box flexDirection="column" gap="sm">
-                {bead.comments.map((c, i) => (
-                  <Box key={`comment-${i}`} flexDirection="column">
-                    <Text size="caption" color="subtle">
-                      {c.author || 'Someone'} · {ago(c.createdMs, nowMs)}
-                    </Text>
-                    {md(`comment-${i}-text`, linkify(c.text))}
-                  </Box>
-                ))}
-              </Box>
-            ),
+            `Comments ${bead.comments.length}`,
+            <Box flexDirection="column" gap="sm">
+              {bead.comments.map((c, i) => (
+                <Box key={`comment-${i}`} flexDirection="column">
+                  <Text size="caption" color="subtle">
+                    {c.author || 'Someone'} · {ago(c.createdMs, nowMs)}
+                  </Text>
+                  {md(`comment-${i}-text`, linkify(c.text))}
+                </Box>
+              ))}
+            </Box>,
           )}
         {!isEpic && children}
       </Box>
