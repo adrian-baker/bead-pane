@@ -807,15 +807,16 @@ export const register: Register = (on, options) => {
     // and the title as the link. A closed bead's title isn't dimmed, because
     // dim link blue on a dark background is hard to read. Children show only
     // their own `.n`, since the parent's ID is in the breadcrumb.
-    // `spaced` puts room under each row, for a list read one bead at a time.
-    // It is in the row's ID cell, which stretches over it, so a tree's lines
-    // run through it to the next row.
+    // `spaced` puts room under each row: `true` for the pane's own list, read
+    // one bead at a time, and `'xs'`, a little, for a bead's lists. It is in
+    // the row's ID cell, which stretches over it, so a tree's lines run
+    // through it to the next row.
     const list = (
       key: string,
       refs: Ref[],
       parentId = '',
       notes: Record<string, string> = {},
-      spaced = false,
+      spaced: boolean | 'xs' = false,
       rowKey = key,
       isRightAligned = parentId !== '',
       width: number | null = null,
@@ -862,7 +863,9 @@ export const register: Register = (on, options) => {
                 // Stretched to the row, a Box centres what it holds on a
                 // desktop: the ID, branch and priority stay on the first line.
                 alignItems="flex-start"
-                {...(spaced ? { paddingBottom: 'sm' as const } : {})}
+                {...(spaced
+                  ? { paddingBottom: spaced === 'xs' ? ('xs' as const) : ('sm' as const) }
+                  : {})}
                 {...(Svg && (hasStem || (isBranch && i < refs.length - 1))
                   ? { overflow: 'hidden' as const }
                   : {})}
@@ -1264,7 +1267,7 @@ export const register: Register = (on, options) => {
             </Text>
           )}
         </Box>
-        {list('kids', shown, id)}
+        {list('kids', shown, id, {}, 'xs')}
         {isLong &&
           onlyStatus === null &&
           md('all', link('~all', isExpanded ? 'Show fewer' : `Show all ${kids.length}`))}
@@ -1357,7 +1360,7 @@ export const register: Register = (on, options) => {
           section(
             'blockers',
             isBlocked ? 'Blocked by' : 'Was blocked by',
-            list('blocker-list', bead.blockedBy),
+            list('blocker-list', bead.blockedBy, '', {}, 'xs'),
             isBlocked ? 'error' : 'subtle',
           )}
         {/* The beads that wait on this one, under a heading that is amber
@@ -1366,7 +1369,7 @@ export const register: Register = (on, options) => {
           section(
             'blocks',
             bead.blocks.some(b => b.status !== 'closed') ? 'Blocks' : 'Was blocking',
-            list('blocks-list', bead.blocks),
+            list('blocks-list', bead.blocks, '', {}, 'xs'),
             bead.blocks.some(b => b.status !== 'closed') ? 'warning' : 'subtle',
           )}
         {isEpic && children}
