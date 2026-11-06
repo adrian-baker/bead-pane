@@ -674,27 +674,22 @@ export const register: Register = (on, options) => {
     ) => {
       const shortOf = (r: Ref) =>
         parentId && r.id.startsWith(`${parentId}.`) ? r.id.slice(parentId.length) : r.id
-      // The ID column is as wide as the longest ID in the list, and each ID is
-      // right-aligned against its glyph, so the glyphs and titles form one
-      // straight column and numbers line up on their last digit, as in a
-      // table. The terminal's cells fit its digits exactly, so there the ID
-      // takes a trailing space; the desktop's narrower digits leave that room.
-      const idWidth =
-        Math.max(...refs.map(r => shortOf(r).length)) + (e.surface === 'terminal' ? 1 : 0)
+      // The ID column is as wide as the longest ID in the list, so the glyphs
+      // and titles form one straight column. A child's ID is a number such as
+      // `.9` or `.11`, right-aligned so it lines up on its last digit, as in a
+      // table; a full ID is left-aligned, since they all start alike.
+      const idWidth = Math.max(...refs.map(r => shortOf(r).length))
+      const align = parentId ? 'flex-end' : 'flex-start'
       return (
         <Box key={key} flexDirection="column" gap={spaced ? 'xs' : undefined}>
           {refs.map(r => (
             <Box key={`${key}-${r.id}`} gap="xs" alignItems="flex-start">
-              <Box flexShrink={0}>
-                <Box width={idWidth} justifyContent="flex-end">
-                  <Text color="subtle">
-                    {e.surface === 'terminal' ? `${shortOf(r)} ` : shortOf(r)}
-                  </Text>
-                </Box>
-                <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
-                  {GLYPH[r.status] ?? '○'}
-                </Text>
+              <Box width={idWidth} flexShrink={0} justifyContent={align}>
+                <Text color="subtle">{shortOf(r)}</Text>
               </Box>
+              <Text color={statusOf(r.status).color} dimColor={r.status === 'closed'}>
+                {GLYPH[r.status] ?? '○'}
+              </Text>
               <Box flexGrow={1} flexShrink={1}>
                 {md(`${key}-${r.id}-title`, link(r.id, r.title || r.id))}
               </Box>
@@ -856,14 +851,34 @@ export const register: Register = (on, options) => {
           <Box gap="md" flexWrap="wrap">
             {counts.map(([st, n]) => {
               const label = `${n} ${statusOf(st).label.toLowerCase()}`
+              const isOn = st === onlyStatus
+              // A chip per status: outlined faintly when off and in the status's
+              // colour when on, so turning one on moves nothing. The terminal
+              // would spend three rows on an outline, so it brackets the one on.
+              const isTerminal = e.surface === 'terminal'
               return (
-                <Box key={`count-${st}`} gap="xs" alignItems="center">
+                <Box
+                  key={`count-${st}`}
+                  gap="xs"
+                  alignItems="center"
+                  {...(isTerminal
+                    ? {}
+                    : {
+                        borderStyle: 'round',
+                        borderColor: isOn ? statusOf(st).color : 'subtle',
+                        borderDimColor: !isOn,
+                        paddingX: 'xs' as const,
+                      })}
+                >
                   <Text size="footnote" color={statusOf(st).color}>
                     {GLYPH[st] ?? '○'}
                   </Text>
                   {md(
                     `count-${st}-link`,
-                    link(`~only:${st}`, st === onlyStatus ? `**${label}**` : label),
+                    link(
+                      `~only:${st}`,
+                      isOn ? (isTerminal ? `[${label}]` : `**${label}**`) : label,
+                    ),
                   )}
                 </Box>
               )
