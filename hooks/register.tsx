@@ -970,7 +970,6 @@ export const register: Register = (on, options) => {
     // they set the ID column; a child filed elsewhere comes after them.
     const nests = (r: Ref) => r.id.startsWith(`${id}.`)
     const kids = [...bead.children.filter(nests), ...bead.children.filter(r => !nests(r))]
-    const doneKids = kids.filter(k => k.status === 'closed')
     // A bar with a run of cells in each status's colour, done first, as the
     // context bar shows what fills the window.
     const runs = barRuns(kids, 20)
@@ -992,7 +991,9 @@ export const register: Register = (on, options) => {
       bd,
       shown.flatMap(k => (k.id in all ? [] : [k.id])),
     )
-    const counts = countByStatus(kids).filter(([st]) => st !== 'closed')
+    // Every status's count, closed included, as a chip that filters to it; the
+    // heading says only the total, so no number shows twice.
+    const counts = countByStatus(kids)
     const children = kids.length > 0 && (
       <Box key="children" flexDirection="column" gap="xs">
         <Box gap="sm" alignItems="center">
@@ -1000,7 +1001,7 @@ export const register: Register = (on, options) => {
             CHILDREN
           </Text>
           <Text size="caption" color="subtle">
-            {doneKids.length}/{kids.length}
+            {kids.length}
           </Text>
           <Text size="caption">
             {runs.map(([st, n]) => (
@@ -1010,8 +1011,7 @@ export const register: Register = (on, options) => {
             ))}
           </Text>
         </Box>
-        {/* With one status left, the list already shows just those, so a
-            filter would add nothing. */}
+        {/* All one status, a filter would add nothing. */}
         {isLong && counts.length > 1 && (
           <Box gap="md" flexWrap="wrap">
             {counts.map(([st, n]) => {

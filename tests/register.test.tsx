@@ -172,7 +172,9 @@ test('a long list of children is summarised until opened', async ($, on) => {
   expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toEqual(
     [16, 17, 18, 19, 20].map(n => `kids-demo-epic1.${n}`),
   )
-  expect(await pane.find({ type: 'Text', text: /^15\/20$/ })).toBeTruthy()
+  // The heading gives the total, and closed gets a chip like the rest.
+  expect(await pane.find({ type: 'Text', text: /^20$/ })).toBeTruthy()
+  expect(textOf(await pane.find({ key: 'count-closed-link' }))).toContain('15 closed')
   expect(textOf(await pane.find({ key: 'count-open-link' }))).toContain('3 open')
   expect(textOf(await pane.find({ key: 'count-in_progress-link' }))).toContain('2 in progress')
   // The bar is 20 cells: 15 closed, 2 in progress, 3 open.
@@ -621,11 +623,9 @@ test('a slow lookup names the bead being opened after a moment', async ($, on) =
   await ui.unmount()
 })
 
-test('a list with one status left offers no filter', async ($, on) => {
+test('a list all of one status offers no filter', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
-  const kids = Array.from({ length: 14 }, (_, i) =>
-    row(`demo-epic2.${i + 1}`, { status: i < 10 ? 'closed' : 'open' }),
-  )
+  const kids = Array.from({ length: 14 }, (_, i) => row(`demo-epic2.${i + 1}`, { status: 'open' }))
   on(
     'process.run',
     fakeBd({
@@ -644,7 +644,7 @@ test('a list with one status left offers no filter', async ($, on) => {
   const pane = await $.ui.mount(PANE)
   await settle(clock)
   expect(await pane.find({ key: 'count-open-link' })).toBeFalsy()
-  expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toHaveLength(4)
+  expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toHaveLength(8)
   await pane.unmount()
   await ui.unmount()
 })
