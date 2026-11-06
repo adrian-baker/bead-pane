@@ -1307,11 +1307,13 @@ export const register: Register = (on, options) => {
             {/* Status, priority, type and assignee, then where the bead is
               tracked elsewhere, as a link where it can be one. */}
             <Box gap="xs" alignItems="center" flexWrap="wrap">
+              {/* The status's glyph at heading size, so it leads the row: a
+                  Text of its own, as a desktop keeps a nested Text at its
+                  parent's size. */}
+              <Text size="heading" color={status.color} dimColor={bead.status === 'closed'}>
+                {GLYPH[bead.status] ?? '○'}
+              </Text>
               <Text size="footnote">
-                {/* The status's glyph at heading size, so it leads the row. */}
-                <Text size="heading" color={status.color} dimColor={bead.status === 'closed'}>
-                  {GLYPH[bead.status] ?? '○'}
-                </Text>{' '}
                 {status.label}
                 {/* A deferred bead says when it comes back. */}
                 {bead.status === 'deferred' &&
