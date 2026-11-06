@@ -27,6 +27,9 @@ const BASE = 'https://beads.invalid/'
 const PANE = 'bead'
 const TIMEOUT_MS = 10000
 const CONFIGURE = '/plugin configure bead-pane@bead-pane'
+const COMMENT_ICON =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="#8b8b8b" ' +
+  'stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 3h11v7.5H8L4.5 13v-2.5h-2z"/></svg>'
 
 // null: not asked yet this session.
 const setup = atom({ plugin: 'bead-pane', key: 'setup' } as const, null, {
@@ -497,7 +500,10 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Markdown } = $.ui.resolve(e)
+    const elements = $.ui.resolve(e)
+    const { Box, Text, Markdown } = elements
+    // The terminal draws no SVG, so its headings go without an icon.
+    const Svg = 'Svg' in elements ? elements.Svg : null
     const found = await read($, setup)
     if (found?.kind !== 'ready') {
       ensureSetup($, bd)
@@ -586,13 +592,27 @@ export const register: Register = (on, options) => {
       linkIds(text, prefix, ref => link(ref, ref.replace(/-/g, '‑')))
 
     // A section: a small upper-case heading over its content.
-    const section = (key: string, heading: string, body: RenderChildren, color = 'subtle') => (
+    const section = (
+      key: string,
+      heading: string,
+      body: RenderChildren,
+      color = 'subtle',
+      icon: RenderChildren = null,
+    ) => (
       <Box key={key} flexDirection="column" gap="xs">
-        <Text size="caption" weight="semibold" color={color}>
-          {heading.toUpperCase()}
-        </Text>
+        <Box gap="xs" alignItems="center">
+          {icon}
+          <Text size="caption" weight="semibold" color={color}>
+            {heading.toUpperCase()}
+          </Text>
+        </Box>
         {body}
       </Box>
+    )
+    // A speech bubble's outline, in about the grey of the heading beside it:
+    // an SVG draws as an image, so it can't take the theme's colour.
+    const commentIcon = Svg && (
+      <Svg key="comment-icon" alt="Comments" width={12} height={12} source={COMMENT_ICON} />
     )
     // A list of beads, one row each: the ID in a grey column, the status glyph,
     // and the title as the link. A closed bead's title isn't dimmed, because
@@ -877,6 +897,8 @@ export const register: Register = (on, options) => {
                 </Box>
               ))}
             </Box>,
+            'subtle',
+            commentIcon,
           )}
         {!isEpic && children}
       </Box>

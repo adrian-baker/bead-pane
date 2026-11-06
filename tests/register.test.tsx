@@ -518,6 +518,7 @@ test("the pane shows a bead's labels, external ref, spec and comments", async ($
   ).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: 'specs/importer.md' })).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: 'COMMENTS 2' })).toBeTruthy()
+  expect(await pane.find({ type: 'Svg' })).toBeTruthy()
   // Oldest first, IDs linked.
   expect(textOf(await pane.find({ key: 'comment-0-text' }))).toBe('Seen again today.')
   expect(textOf(await pane.find({ key: 'comment-1-text' }))).toBe(
