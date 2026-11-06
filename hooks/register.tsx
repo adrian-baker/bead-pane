@@ -801,7 +801,7 @@ export const register: Register = (on, options) => {
       // a list that mixes types: in one of tasks alone it would say nothing.
       const showsTypes = new Set(refs.flatMap(r => (r.type ? [r.type] : []))).size > 1
       const typeOf = (r: Ref) => {
-        const icon = Svg && r.type ? typeIcon(r.type, 13, 1, 0.7) : null
+        const icon = Svg && r.type ? typeIcon(r.type, 12, 0, 0.7) : null
         return (
           Svg &&
           icon && <Svg key={`${rowKey}-${r.id}-type`} alt={r.type ?? ''} {...icon} isInteractive />
@@ -1052,9 +1052,10 @@ export const register: Register = (on, options) => {
     const refHref = bead.externalRef === '' ? null : refUrl(bead.externalRef, repo)
 
     const isBlocked = bead.blockedBy.some(b => b.status !== 'closed')
-    // Centred on the title's line, the icon centres on the capitals; 1px
-    // lower, it sits between them and the lower case.
-    const titleIcon = typeIcon(bead.type, 16, 1)
+    // Centred on the title's line, the icon centres on the capitals. At 14px
+    // a boxed icon, such as a task's, is as tall as they are; a larger one
+    // overhangs them and reads as off-centre whichever way it is nudged.
+    const titleIcon = typeIcon(bead.type, 14)
 
     // Children whose IDs nest under this bead's come first, in ID order, so
     // they set the ID column; a child filed elsewhere comes after them.
