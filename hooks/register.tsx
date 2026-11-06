@@ -1148,71 +1148,75 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column" gap="lg">
-        <Box flexDirection="column" gap="xs">
-          {/* The breadcrumb row is always drawn, so the rest of the pane stays
+        {/* The description sits closer to the header than the sections below
+            sit to each other: it is the header's body. */}
+        <Box flexDirection="column" gap="md">
+          <Box flexDirection="column" gap="xs">
+            {/* The breadcrumb row is always drawn, so the rest of the pane stays
               in place when it moves to another bead. It is the pane's only
               navigation: "Beads" leads to this session's beads, ancestors
               are links, and the conversation's links reopen anything else. */}
-          <Box>{md('trail', crumbs)}</Box>
-          {/* The type's icon leads the title, so an epic, a task and a bug
+            <Box>{md('trail', crumbs)}</Box>
+            {/* The type's icon leads the title, so an epic, a task and a bug
               look different at a glance; the status line names the type. */}
-          <Box gap="sm" alignItems="flex-start">
-            {Svg && titleIcon && (
-              // A zero-width character in the title's size makes this box one
-              // title line tall, so the icon centres on the first line.
-              <Box alignItems="center" flexShrink={0}>
-                <Svg key="type-icon" alt={bead.type} {...titleIcon} isInteractive />
-                <Text size="heading" weight="semibold">
-                  {'\u200b'}
-                </Text>
-              </Box>
-            )}
-            <Text size="heading" weight="semibold">
-              {bead.title}
-            </Text>
-          </Box>
-          {/* Status, priority, type and assignee, then where the bead is
-              tracked elsewhere, as a link where it can be one. */}
-          <Box gap="xs" alignItems="center" flexWrap="wrap">
-            <Text size="footnote">
-              <Text color={status.color} dimColor={bead.status === 'closed'}>
-                {GLYPH[bead.status] ?? '○'}{' '}
-              </Text>
-              {status.label}
-              {bead.priority !== null && <Text color="subtle">{'  ·  '}</Text>}
-              {bead.priority !== null && (
-                <Text color={priorityColor(bead.priority)}>P{bead.priority}</Text>
+            <Box gap="sm" alignItems="flex-start">
+              {Svg && titleIcon && (
+                // A zero-width character in the title's size makes this box one
+                // title line tall, so the icon centres on the first line.
+                <Box alignItems="center" flexShrink={0}>
+                  <Svg key="type-icon" alt={bead.type} {...titleIcon} isInteractive />
+                  <Text size="heading" weight="semibold">
+                    {'\u200b'}
+                  </Text>
+                </Box>
               )}
-              {/* The type in words only where no icon says it. */}
-              {bead.type !== '' && !(Svg && titleIcon) && <Text color="subtle">{'  ·  '}</Text>}
-              {bead.type !== '' &&
-                !(Svg && titleIcon) &&
-                bead.type.replace(/^./, c => c.toUpperCase())}
-              <Text color="subtle">{'  ·  '}</Text>
-              {bead.assignee ? bead.assignee : <Text color="subtle">Unassigned</Text>}
-            </Text>
-            {refHref !== null && <Text color="subtle">·</Text>}
-            {refHref !== null && md('ref', `[${refLabel(bead.externalRef)}](${refHref})`)}
-            {/* Then, smaller, when it last changed, any ref that can't be a
+              <Text size="heading" weight="semibold">
+                {bead.title}
+              </Text>
+            </Box>
+            {/* Status, priority, type and assignee, then where the bead is
+              tracked elsewhere, as a link where it can be one. */}
+            <Box gap="xs" alignItems="center" flexWrap="wrap">
+              <Text size="footnote">
+                <Text color={status.color} dimColor={bead.status === 'closed'}>
+                  {GLYPH[bead.status] ?? '○'}{' '}
+                </Text>
+                {status.label}
+                {bead.priority !== null && <Text color="subtle">{'  ·  '}</Text>}
+                {bead.priority !== null && (
+                  <Text color={priorityColor(bead.priority)}>P{bead.priority}</Text>
+                )}
+                {/* The type in words only where no icon says it. */}
+                {bead.type !== '' && !(Svg && titleIcon) && <Text color="subtle">{'  ·  '}</Text>}
+                {bead.type !== '' &&
+                  !(Svg && titleIcon) &&
+                  bead.type.replace(/^./, c => c.toUpperCase())}
+                <Text color="subtle">{'  ·  '}</Text>
+                {bead.assignee ? bead.assignee : <Text color="subtle">Unassigned</Text>}
+              </Text>
+              {refHref !== null && <Text color="subtle">·</Text>}
+              {refHref !== null && md('ref', `[${refLabel(bead.externalRef)}](${refHref})`)}
+              {/* Then, smaller, when it last changed, any ref that can't be a
                 link, and its labels: one row, wrapping on a narrow pane. */}
-            <Text color="subtle">·</Text>
-            <Text size="caption" color="subtle">
-              {[
-                bead.status === 'closed' && bead.closedMs !== null
-                  ? `Closed ${ago(bead.closedMs, nowMs)}`
-                  : `Updated ${ago(bead.updatedMs, nowMs)}`,
-                `created ${ago(bead.createdMs, nowMs)}`,
-                refHref === null ? bead.externalRef : '',
-                ...bead.labels,
-              ]
-                .filter(part => part !== '')
-                .join(' · ')}
-            </Text>
+              <Text color="subtle">·</Text>
+              <Text size="caption" color="subtle">
+                {[
+                  bead.status === 'closed' && bead.closedMs !== null
+                    ? `Closed ${ago(bead.closedMs, nowMs)}`
+                    : `Updated ${ago(bead.updatedMs, nowMs)}`,
+                  `created ${ago(bead.createdMs, nowMs)}`,
+                  refHref === null ? bead.externalRef : '',
+                  ...bead.labels,
+                ]
+                  .filter(part => part !== '')
+                  .join(' · ')}
+              </Text>
+            </Box>
           </Box>
-        </Box>
-        {/* The bead's main text, under its title as an issue's body is, so it
+          {/* The bead's main text, under its title as an issue's body is, so it
             needs no heading of its own. */}
-        {bead.description.trim() !== '' && md('desc', linkify(bead.description))}
+          {bead.description.trim() !== '' && md('desc', linkify(bead.description))}
+        </Box>
         {/* Every blocker, closed ones too, so it's plain what the bead waited
             on: under a red heading while any is open, a grey one after. */}
         {bead.blockedBy.length > 0 &&
