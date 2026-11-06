@@ -1175,20 +1175,21 @@ export const register: Register = (on, options) => {
             </Text>
             {refHref !== null && <Text color="subtle">·</Text>}
             {refHref !== null && md('ref', `[${refLabel(bead.externalRef)}](${refHref})`)}
+            {/* Then, smaller, when it last changed, any ref that can't be a
+                link, and its labels: one row, wrapping on a narrow pane. */}
+            <Text size="caption" color="subtle">
+              {[
+                bead.status === 'closed' && bead.closedMs !== null
+                  ? `Closed ${ago(bead.closedMs, nowMs)}`
+                  : `Updated ${ago(bead.updatedMs, nowMs)}`,
+                `created ${ago(bead.createdMs, nowMs)}`,
+                refHref === null ? bead.externalRef : '',
+                ...bead.labels,
+              ]
+                .filter(part => part !== '')
+                .join(' · ')}
+            </Text>
           </Box>
-          {/* When it last changed, then where else it's tracked and its labels. */}
-          <Text size="caption" color="subtle">
-            {[
-              bead.status === 'closed' && bead.closedMs !== null
-                ? `Closed ${ago(bead.closedMs, nowMs)}`
-                : `Updated ${ago(bead.updatedMs, nowMs)}`,
-              `created ${ago(bead.createdMs, nowMs)}`,
-              refHref === null ? bead.externalRef : '',
-              ...bead.labels,
-            ]
-              .filter(part => part !== '')
-              .join(' · ')}
-          </Text>
         </Box>
         {/* The bead's main text, under its title as an issue's body is, so it
             needs no heading of its own. */}
