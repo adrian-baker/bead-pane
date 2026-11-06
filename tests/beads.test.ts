@@ -17,6 +17,7 @@ import {
   parseShown,
   summarised,
   trailLabels,
+  underParents,
 } from '../hooks/beads'
 import { row } from './fake-bd'
 
@@ -163,4 +164,17 @@ test('an external ref reads as a PR or an issue and links where it can', () => {
   expect(refUrl('gh-2510', 'acme/widgets')).toBe('https://github.com/acme/widgets/issues/2510')
   expect(refUrl('gh-2510', null)).toBeNull()
   expect(refUrl('jira-ABC-1', 'acme/widgets')).toBeNull()
+})
+
+test('rows group under a shared parent, in the order each group first appears', () => {
+  const epic = ref('demo-e')
+  const parents: Record<string, typeof epic> = { 'demo-e.1': epic, 'demo-e.2': epic }
+  const groups = underParents(
+    [ref('demo-e.2'), ref('demo-x'), ref('demo-e.1')],
+    id => parents[id] ?? null,
+  )
+  expect(groups.map(g => [g.parent?.id ?? null, g.rows.map(r => r.id)])).toEqual([
+    ['demo-e', ['demo-e.2', 'demo-e.1']],
+    [null, ['demo-x']],
+  ])
 })
