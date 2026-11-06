@@ -175,6 +175,9 @@ export const parseAssigned = (stdout: string): { id: string; atMs: number }[] =>
     typeof r.id === 'string' ? [{ id: r.id, atMs: ms(r.updated_at) ?? 0 }] : [],
   )
 
+// Whether the session worked on a bead, or only looked at it or named it.
+export const isWork = (how: How): boolean => how !== 'viewed' && how !== 'mentioned'
+
 // What a `bd` subcommand did; `null` for the ones that change nothing.
 const VERB = new Map<string, How | null>([
   ['create', 'created'],

@@ -4,6 +4,7 @@ import {
   barRuns,
   changedBy,
   idsIn,
+  isWork,
   linkIds,
   parseShown,
   summarised,
@@ -90,4 +91,11 @@ test('the breadcrumb shortens each ID that nests in the one before', () => {
     '.1',
     'demo-x1y2',
   ])
+})
+
+test('viewing or linking a bead is not working on it', () => {
+  expect(isWork('claimed')).toBe(true)
+  expect(isWork('in title')).toBe(true)
+  expect(isWork('viewed')).toBe(false)
+  expect(isWork('mentioned')).toBe(false)
 })

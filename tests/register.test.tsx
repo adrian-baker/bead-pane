@@ -95,7 +95,7 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   expect(await text('desc')).toBe('Follow-up to [demo‑d3e4f](https://beads.invalid/demo-d3e4f).')
   expect(await text('text-Notes')).toBe('Check the fixtures first.')
   expect(await text('trail')).toBe(
-    '[Recent](https://beads.invalid/~home) › [demo-p0000](https://beads.invalid/demo-p0000) › demo-a1b2c',
+    '[☰](https://beads.invalid/~home) › [demo-p0000](https://beads.invalid/demo-p0000) › demo-a1b2c',
   )
   // In ID order whatever their status, `.9` before `.10`, each by its own `.n`.
   expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toEqual([
@@ -112,16 +112,17 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   await clock.advance(1000)
   await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/demo-d3e4f' } })
   await settle(clock)
-  expect(await text('trail')).toBe('[Recent](https://beads.invalid/~home) › demo-d3e4f')
+  expect(await text('trail')).toBe('[☰](https://beads.invalid/~home) › demo-d3e4f')
   // The beads opened are in the list, the latest first, and the reply's
   // other link as mentioned.
   await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/~home' } })
   await settle(clock)
-  expect(keysOf((await pane.find({ key: 'session' }))?.children)).toEqual([
-    'session-demo-d3e4f',
-    'session-demo-a1b2c',
-    'session-demo-g5h6.4',
+  expect(keysOf((await pane.find({ key: 'seen' }))?.children)).toEqual([
+    'seen-demo-d3e4f',
+    'seen-demo-a1b2c',
+    'seen-demo-g5h6.4',
   ])
+  expect(await pane.find({ key: 'worked' })).toBeFalsy()
   expect(await pane.findAll({ type: 'Text', text: /^viewed$/ })).toHaveLength(2)
   expect(await pane.find({ type: 'Text', text: /^mentioned$/ })).toBeTruthy()
 
@@ -217,10 +218,10 @@ test("the pane's list holds the beads this session's bd commands changed, kept c
   await settle(clock)
   // `bd show` changes nothing, the quoted title isn't searched, and the
   // parent of a create isn't touched.
-  expect(keysOf((await pane.find({ key: 'session' }))?.children).sort()).toEqual([
-    'session-demo-clm1',
-    'session-demo-new1',
-    'session-demo-old1',
+  expect(keysOf((await pane.find({ key: 'worked' }))?.children).sort()).toEqual([
+    'worked-demo-clm1',
+    'worked-demo-new1',
+    'worked-demo-old1',
   ])
   expect(await pane.find({ type: 'Text', text: /^claimed$/ })).toBeTruthy()
   expect(await pane.find({ type: 'Text', text: /^created$/ })).toBeTruthy()
@@ -321,7 +322,7 @@ test('a bead bd fails to read says so, and asks again when pressed', async ($, o
   await $.tool.call({ tool: 'Bash', command: 'bd update demo-a1b2c --claim' })
   await settle(clock)
   await pane.press({
-    key: 'session-demo-a1b2c-title',
+    key: 'worked-demo-a1b2c-title',
     link: { href: 'https://beads.invalid/demo-a1b2c' },
   })
   await settle(clock)
@@ -344,7 +345,7 @@ test("a bead the session's title names is in the pane's list", async ($, on) => 
   await $.classic.SessionStart({ source: 'resume', session_title: 'demo-t1t2 event page pass' })
   const pane = await $.ui.mount(PANE)
   await settle(clock)
-  expect(keysOf((await pane.find({ key: 'session' }))?.children)).toEqual(['session-demo-t1t2'])
+  expect(keysOf((await pane.find({ key: 'worked' }))?.children)).toEqual(['worked-demo-t1t2'])
   expect(await pane.find({ type: 'Text', text: /^in title$/ })).toBeTruthy()
   await pane.unmount()
 })

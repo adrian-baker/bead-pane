@@ -13,8 +13,9 @@ pane. The pane shows:
 Bead IDs in the pane are links too, so you can move through the tree from there. An ID inside
 code, such as `` `bd show demo-g5h6` ``, stays as written.
 
-`/beads`, or "Recent" in the breadcrumb, lists the beads this session has touched, most recent
-first, with what it last did to each. The mod adds a bead when:
+`/beads`, or ☰ at the start of the breadcrumb, lists the beads this session has touched, most
+recent first, with what it last did to each. Beads it worked on come first, then beads it only
+opened or linked. The mod adds a bead when:
 
 - a `bd` command in the session claims, creates, updates, comments on, links, closes or reopens
   it, a subagent's command included

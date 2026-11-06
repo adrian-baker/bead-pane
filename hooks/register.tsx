@@ -7,6 +7,7 @@ import {
   barRuns,
   changedBy,
   idsIn,
+  isWork,
   linkIds,
   countByStatus,
   JOURNAL,
@@ -595,19 +596,31 @@ export const register: Register = (on, options) => {
         bd,
         seen.flatMap(([ref]) => (ref in all ? [] : [ref])),
       )
-      const rows: Ref[] = seen.flatMap(([ref]) => {
-        const entry = all[ref]
-        if (entry?.kind === 'missing') return []
-        const bead = entry?.kind === 'found' ? entry.bead : null
-        return [{ id: ref, title: bead?.title ?? '', status: bead?.status ?? '' }]
-      })
+      const rowsOf = (entries: typeof seen): Ref[] =>
+        entries.flatMap(([ref]) => {
+          const entry = all[ref]
+          if (entry?.kind === 'missing') return []
+          const bead = entry?.kind === 'found' ? entry.bead : null
+          return [{ id: ref, title: bead?.title ?? '', status: bead?.status ?? '' }]
+        })
+      // The beads the session worked on, then the ones it only opened or linked.
+      const worked = rowsOf(seen.filter(([, t]) => isWork(t.how)))
+      const looked = rowsOf(seen.filter(([, t]) => !isWork(t.how)))
       const notes = Object.fromEntries(seen.map(([ref, t]) => [ref, t.how]))
-      return rows.length > 0 ? (
-        list('session', rows, '', notes)
-      ) : (
-        <Text color="subtle">
-          None yet. A bead this session links, opens, claims, creates, changes or closes shows here.
-        </Text>
+      if (worked.length === 0 && looked.length === 0) {
+        return (
+          <Text color="subtle">
+            None yet. A bead this session links, opens, claims, creates, changes or closes shows
+            here.
+          </Text>
+        )
+      }
+      return (
+        <Box flexDirection="column" gap="lg">
+          {worked.length > 0 &&
+            section('worked-section', 'Worked on', list('worked', worked, '', notes))}
+          {looked.length > 0 && section('seen-section', 'Seen', list('seen', looked, '', notes))}
+        </Box>
       )
     }
     const entry = all[id]
@@ -639,13 +652,13 @@ export const register: Register = (on, options) => {
       [...above, ...bead.blockedBy].flatMap(r => (r.id in all ? [] : [r.id])),
     )
 
-    // The breadcrumb: "Recent", the pane's list, then each bead above, then
+    // The breadcrumb: ☰ for the pane's list, then each bead above, then
     // this one, unlinked.
     const chain = [...above.map(r => r.id), id]
     const trail = trailLabels(chain)
       .map((label, i) => (i === chain.length - 1 ? label : link(chain[i] ?? '', label)))
       .join(' › ')
-    const crumbs = `${link('~home', 'Recent')} › ${trail}`
+    const crumbs = `${link('~home', '☰')} › ${trail}`
 
     const status = statusOf(bead.status)
 
@@ -703,7 +716,7 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column" gap="xs">
           {/* The breadcrumb row is always drawn, so the rest of the pane stays
               in place when it moves to another bead. It is the pane's only
-              navigation: "Recent" leads to this session's beads, ancestors
+              navigation: ☰ leads to this session's beads, ancestors
               are links, and the conversation's links reopen anything else. */}
           <Box>{md('trail', crumbs)}</Box>
           <Text size="heading" weight="semibold">
