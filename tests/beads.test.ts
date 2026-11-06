@@ -17,6 +17,7 @@ import {
   isWork,
   linkIds,
   parseComments,
+  parseDependents,
   parseShown,
   summarised,
   underParents,
@@ -43,6 +44,7 @@ test('a bd command is read past its global flags, and quoted text is skipped', (
     [{ id: 'demo-a1b2', how: 'claimed' }],
   )
   expect(changedBy('bd comments demo-a1b2', '', 'demo')).toEqual([])
+  expect(changedBy('bd dep list demo-a1b2 --direction=up', '', 'demo')).toEqual([])
   expect(changedBy('bd comments add demo-a1b2 -f note.md', '', 'demo')).toEqual([
     { id: 'demo-a1b2', how: 'commented' },
   ])
@@ -57,7 +59,7 @@ test('bd show tells a bead it lacks from a bd that failed', () => {
   })
   expect(found.lookups['demo-a1b2']?.kind).toBe('found')
   expect(found.lookups['demo-zzzz']).toEqual({ kind: 'missing' })
-  expect(found.withChildren).toEqual(['demo-a1b2'])
+  expect(found.withDependents).toEqual(['demo-a1b2'])
 
   const none = parseShown(['demo-zzzz'], {
     exitCode: 1,
@@ -208,4 +210,17 @@ test('a note with a time reads as time ago, a date alone as the date', () => {
   expect(noteWhen('2026-11-06', now)).toBe(
     new Date(2026, 10, 6).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
   )
+})
+
+test("a bead's dependents split into its children and the beads it blocks", () => {
+  const deps = parseDependents(
+    JSON.stringify([
+      { ...row('demo-a.10'), dependency_type: 'parent-child' },
+      { ...row('demo-a.9'), dependency_type: 'parent-child' },
+      { ...row('demo-b'), dependency_type: 'blocks' },
+      { ...row('demo-c'), dependency_type: 'tracks' },
+    ]),
+  )
+  expect(deps.children.map(r => r.id)).toEqual(['demo-a.9', 'demo-a.10'])
+  expect(deps.blocks.map(r => r.id)).toEqual(['demo-b'])
 })

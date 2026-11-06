@@ -23,7 +23,7 @@ import {
   countByStatus,
   JOURNAL,
   parseAssigned,
-  parseChildren,
+  parseDependents,
   parseComments,
   parseDatabasePath,
   parsePrefix,
@@ -94,7 +94,7 @@ const beads = atom(
   { plugin: 'bead-pane', key: 'beads' } as const,
   {},
   {
-    shape: 'beads-8',
+    shape: 'beads-10',
   },
 )
 // The bead the pane shows; null for the session's list.
@@ -262,34 +262,34 @@ function refresh($: EngineInterface, bd: string, ids: readonly string[]): void {
   ensure($, bd, ids)
 }
 
-// One `bd show` for the pending IDs, then `bd children` for each bead that can
-// have children, one at a time. Writing the atom redraws what reads it.
+// One `bd show` for the pending IDs, then `bd dep list` for each bead that can
+// have children or block others, one at a time. Writing the atom redraws what reads it.
 async function lookUp($: EngineInterface, bd: string): Promise<void> {
   const ids = pending
   pending = []
   const shown = await runBd($, bd, ['show', ...ids, '--json'])
-  const { lookups, withChildren } =
+  const { lookups, withDependents } =
     shown.kind === 'ran'
       ? parseShown(ids, shown.result)
       : {
           lookups: Object.fromEntries(
             ids.map((id): [string, Lookup] => [id, { kind: 'failed', detail: shown.detail }]),
           ),
-          withChildren: [],
+          withDependents: [],
         }
-  for (const id of withChildren) {
+  for (const id of withDependents) {
     const entry = lookups[id]
     if (entry?.kind !== 'found') continue
-    const kids = await runBd($, bd, ['children', id, '--json'])
+    const deps = await runBd($, bd, ['dep', 'list', id, '--direction=up', '--json'])
     lookups[id] =
-      kids.kind === 'ran' && kids.result.exitCode === 0
-        ? { kind: 'found', bead: { ...entry.bead, children: parseChildren(kids.result.stdout) } }
+      deps.kind === 'ran' && deps.result.exitCode === 0
+        ? { kind: 'found', bead: { ...entry.bead, ...parseDependents(deps.result.stdout) } }
         : {
             kind: 'failed',
             detail:
-              kids.kind === 'failed'
-                ? kids.detail
-                : kids.result.stderr.trim() || 'bd children failed',
+              deps.kind === 'failed'
+                ? deps.detail
+                : deps.result.stderr.trim() || 'bd dep list failed',
           }
   }
   // The comments of the bead the pane shows, so a list of beads needs no more calls.
@@ -1295,6 +1295,13 @@ export const register: Register = (on, options) => {
                   {GLYPH[bead.status] ?? '○'}{' '}
                 </Text>
                 {status.label}
+                {/* A deferred bead says when it comes back. */}
+                {bead.status === 'deferred' &&
+                  bead.deferUntilMs !== null &&
+                  ` until ${new Date(bead.deferUntilMs).toLocaleDateString(undefined, {
+                    day: 'numeric',
+                    month: 'short',
+                  })}`}
                 {bead.priority !== null && <Text color="subtle">{'  ·  '}</Text>}
                 {bead.priority !== null && (
                   <Text color={priorityColor(bead.priority)}>P{bead.priority}</Text>
@@ -1338,6 +1345,15 @@ export const register: Register = (on, options) => {
             isBlocked ? 'Blocked by' : 'Was blocked by',
             list('blocker-list', bead.blockedBy),
             isBlocked ? 'error' : 'subtle',
+          )}
+        {/* The beads that wait on this one, under a heading that is amber
+            while any is still open and grey once all are done. */}
+        {bead.blocks.length > 0 &&
+          section(
+            'blocks',
+            bead.blocks.some(b => b.status !== 'closed') ? 'Blocks' : 'Was blocking',
+            list('blocks-list', bead.blocks),
+            bead.blocks.some(b => b.status !== 'closed') ? 'warning' : 'subtle',
           )}
         {isEpic && children}
         {bead.status === 'closed' &&

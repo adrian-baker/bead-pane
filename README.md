@@ -6,7 +6,7 @@ pane. The pane shows:
 
 - the title, status, priority, type, assignee and dates
 - the beads above it, as a breadcrumb
-- its open blockers
+- its blockers, and the beads that wait on it
 - the description, notes, design, acceptance criteria, spec and close reason
 - its comments, its labels and where else it's tracked, such as `gh-2510`
 - its children, with a bar coloured by status. Past 12, it shows the ones still open, a count of
@@ -26,7 +26,7 @@ linked. The mod adds a bead when:
 - it's open and assigned to the session's `BEADS_ACTOR`, which covers a claim made before the
   mod loaded. Without `BEADS_ACTOR` the mod skips this.
 
-The mod reads beads with `bd show --json` and `bd children --json` and doesn't change them. It
+The mod reads beads with `bd show --json` and `bd dep list --direction=up --json` and doesn't change them. It
 looks beads up after a message has drawn, all the IDs a draw needs in one `bd show`, and keeps
 the answers for the session. Neither the reply nor the model waits on `bd`, and the lookups use
 no tokens.

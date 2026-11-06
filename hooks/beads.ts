@@ -131,6 +131,7 @@ const beadOf = (row: Row): Bead => {
     createdMs: ms(row.created_at),
     updatedMs: ms(row.updated_at),
     closedMs: ms(row.closed_at),
+    deferUntilMs: ms(row.defer_until),
     labels: Array.isArray(row.labels) ? row.labels.filter(l => typeof l === 'string') : [],
     externalRef: str(row.external_ref),
     specId: str(row.spec_id),
@@ -140,18 +141,20 @@ const beadOf = (row: Row): Bead => {
     blockedBy: ofType('blocks'),
     parent: ofType('parent-child')[0] ?? refs(deps.filter(d => d.id === row.parent))[0] ?? null,
     children: [],
+    blocks: [],
     closeReason: str(row.close_reason),
   }
 }
 
 // `bd show <id>... --json`: the rows it found, exit 0. When it finds none it
 // exits 1 with `{ "error": "no issues found …" }`. Anything else is a failure
-// for every ID asked. Children come from a second command, so they start
-// empty; `withChildren` names the beads that can have some.
+// for every ID asked. Children and the beads it blocks come from a second
+// command, so they start empty; `withDependents` names the beads that can
+// have some.
 export const parseShown = (
   ids: readonly string[],
   ran: { exitCode: number; stdout: string; stderr: string },
-): { lookups: Record<string, Lookup>; withChildren: string[] } => {
+): { lookups: Record<string, Lookup>; withDependents: string[] } => {
   const parsed = json(ran.stdout)
   const isNoneFound =
     ran.exitCode !== 0 && isRow(parsed) && /no issues found/.test(str(parsed.error))
@@ -159,7 +162,7 @@ export const parseShown = (
     const detail = (ran.stderr || ran.stdout).trim() || `bd exited with ${ran.exitCode}`
     return {
       lookups: Object.fromEntries(ids.map(id => [id, { kind: 'failed', detail }])),
-      withChildren: [],
+      withDependents: [],
     }
   }
   const found = new Map(
@@ -172,8 +175,8 @@ export const parseShown = (
         return [id, row ? { kind: 'found', bead: beadOf(row) } : { kind: 'missing' }]
       }),
     ),
-    // Only a bead something depends on can have children.
-    withChildren: ids.filter(id => {
+    // Only a bead something depends on has children or blocks anything.
+    withDependents: ids.filter(id => {
       const count = found.get(id)?.dependent_count
       return typeof count === 'number' && count > 0
     }),
@@ -186,8 +189,14 @@ export const parseComments = (stdout: string): Comment[] =>
     .map(r => ({ author: str(r.author), text: str(r.text), createdMs: ms(r.created_at) }))
     .sort((a, b) => (a.createdMs ?? 0) - (b.createdMs ?? 0))
 
-// `bd children <id> --json`, in ID order.
-export const parseChildren = (stdout: string): Ref[] => refs(json(stdout)).sort(byId)
+// `bd dep list <id> --direction=up --json`: the beads under it and the beads
+// it blocks, each in ID order. Other kinds of link, such as `tracks`, are left
+// out.
+export const parseDependents = (stdout: string): { children: Ref[]; blocks: Ref[] } => {
+  const all = rows(json(stdout))
+  const ofType = (type: string) => refs(all.filter(r => r.dependency_type === type)).sort(byId)
+  return { children: ofType('parent-child'), blocks: ofType('blocks') }
+}
 
 // `bd list --json`: each bead's ID and when it last changed.
 export const parseAssigned = (stdout: string): { id: string; atMs: number }[] =>
@@ -259,6 +268,8 @@ export const changedBy = (
       if (!verb) return []
       const args = words.slice(at + 1)
       if (sub === 'comments' && args[0] !== 'add') return []
+      // `bd dep list`, `tree` and `cycles` only read.
+      if (sub === 'dep' && ['list', 'tree', 'cycles'].includes(args[0] ?? '')) return []
       const how: How = sub === 'update' && args.includes('--claim') ? 'claimed' : verb
       const ids =
         sub === 'create' ? idsIn(stdout, prefix).slice(0, 1) : idsIn(args.join(' '), prefix)

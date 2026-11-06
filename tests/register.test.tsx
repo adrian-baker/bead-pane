@@ -92,6 +92,7 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
           row('demo-a1b2c.9', { title: 'Ninth', status: 'closed' }),
         ],
       },
+      blocks: { 'demo-a1b2c': [row('demo-x9y8', { title: 'Waits on it' })] },
     }),
   )
   // The engine's own drawing of a message: its text as Markdown.
@@ -130,13 +131,18 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   ])
   expect(await text('kids-demo-a1b2c.9-title')).toBe('[Ninth](https://beads.invalid/demo-a1b2c.9)')
   expect(await pane.find({ type: 'Text', text: /^\.10$/ })).toBeTruthy()
-  // Every child and blocker shows its priority, closed ones too.
-  expect(await pane.findAll({ type: 'Text', text: /^P2$/ })).toHaveLength(3)
+  // Every child, blocker and bead it blocks shows its priority, closed ones too.
+  expect(await pane.findAll({ type: 'Text', text: /^P2$/ })).toHaveLength(4)
   expect(await pane.find({ key: 'text-resolution' })).toBeFalsy()
   expect(await pane.find({ type: 'Text', text: /P3/ })).toBeTruthy()
   // Its one blocker is closed, so it's listed under a grey heading.
   expect(await pane.find({ type: 'Text', text: 'WAS BLOCKED BY' })).toBeTruthy()
   expect(await pane.find({ key: 'blocker-list-demo-d3e4f' })).toBeTruthy()
+  // What waits on it, under an amber heading while any of it is open.
+  expect(await pane.find({ type: 'Text', text: 'BLOCKS' })).toBeTruthy()
+  expect(await text('blocks-list-demo-x9y8-title')).toBe(
+    '[Waits on it](https://beads.invalid/demo-x9y8)',
+  )
 
   // A link in the description moves the pane, and the breadcrumb leads back up.
   await clock.advance(1000)
@@ -680,6 +686,34 @@ test('a list all of one status offers no filter', async ($, on) => {
   await settle(clock)
   expect(await pane.find({ key: 'count-open' })).toBeFalsy()
   expect(keysOf((await pane.find({ key: 'kids' }))?.children)).toHaveLength(8)
+  await pane.unmount()
+  await ui.unmount()
+})
+
+test('a deferred bead says when it comes back', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  on(
+    'process.run',
+    fakeBd({
+      beads: {
+        'demo-later': row('demo-later', {
+          status: 'deferred',
+          defer_until: '2026-11-08T11:00:00Z',
+        }),
+      },
+    }),
+  )
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
+    const { Markdown } = $.ui.resolve(e)
+    return <Markdown text={e.props.text} />
+  })
+  const ui = await $.ui.mount(message('See demo-later.'))
+  await settle(clock)
+  await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-later' } })
+  const pane = await $.ui.mount(PANE)
+  await settle(clock)
+  expect(await pane.find({ type: 'Text', text: /Deferred until \S+ \S+/ })).toBeTruthy()
   await pane.unmount()
   await ui.unmount()
 })

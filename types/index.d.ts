@@ -14,6 +14,8 @@ export type Bead = {
   createdMs: number | null
   updatedMs: number | null
   closedMs: number | null
+  // When a deferred bead comes back, as `bd defer --until` gave it.
+  deferUntilMs: number | null
   labels: string[]
   // Where the bead is tracked elsewhere, such as `gh-2510`; empty when nowhere.
   externalRef: string
@@ -28,6 +30,8 @@ export type Bead = {
   // The bead this one sits under, and the beads under it.
   parent: Ref | null
   children: Ref[]
+  // The beads that wait on this one.
+  blocks: Ref[]
   // Why it was closed, as `bd close --reason` gave it; empty while open.
   closeReason: string
 }

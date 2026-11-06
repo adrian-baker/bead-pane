@@ -48,6 +48,8 @@ export type FakeBd = {
   prefix?: string
   beads?: Record<string, Record<string, unknown>>
   children?: Record<string, Record<string, unknown>[]>
+  // The beads each bead blocks, as `bd dep list --direction=up` gives them.
+  blocks?: Record<string, Record<string, unknown>[]>
   comments?: Record<string, Record<string, unknown>[]>
   assigned?: Record<string, unknown>[]
   // What `git remote get-url origin` prints; not a git checkout when absent.
@@ -65,6 +67,7 @@ export const fakeBd =
     prefix = 'demo',
     beads = {},
     children = {},
+    blocks = {},
     comments = {},
     assigned = [],
     databasePath,
@@ -82,7 +85,13 @@ export const fakeBd =
     }
     const [, verb = '', ...rest] = e.argv
     if (verb === 'config') return answer(0, `${prefix}\n`)
-    if (verb === 'children') return answer(0, children[rest[0] ?? ''] ?? [])
+    if (verb === 'dep' && rest[0] === 'list') {
+      const id = rest[1] ?? ''
+      return answer(0, [
+        ...(children[id] ?? []).map(r => ({ ...r, dependency_type: 'parent-child' })),
+        ...(blocks[id] ?? []).map(r => ({ ...r, dependency_type: 'blocks' })),
+      ])
+    }
     if (verb === 'list') return answer(0, assigned)
     if (verb === 'comments') return answer(0, comments[rest[0] ?? ''] ?? [])
     if (verb === 'info') {
