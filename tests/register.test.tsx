@@ -113,18 +113,15 @@ test('a bead ID becomes a link that opens the bead in the pane', async ($, on) =
   await pane.press({ key: 'desc', link: { href: 'https://beads.invalid/demo-d3e4f' } })
   await settle(clock)
   expect(await text('trail')).toBe('[☰](https://beads.invalid/~home) › demo-d3e4f')
-  // The beads opened are in the list, the latest first, and the reply's
-  // other link as mentioned.
+  // The reply's links are in the list as mentioned. Opening a bead adds nothing.
   await pane.press({ key: 'trail', link: { href: 'https://beads.invalid/~home' } })
   await settle(clock)
-  expect(keysOf((await pane.find({ key: 'seen' }))?.children)).toEqual([
-    'seen-demo-d3e4f',
-    'seen-demo-a1b2c',
-    'seen-demo-g5h6.4',
+  expect(keysOf((await pane.find({ key: 'mentioned' }))?.children)).toEqual([
+    'mentioned-demo-a1b2c',
+    'mentioned-demo-g5h6.4',
   ])
   expect(await pane.find({ key: 'worked' })).toBeFalsy()
-  expect(await pane.findAll({ type: 'Text', text: /^viewed$/ })).toHaveLength(2)
-  expect(await pane.find({ type: 'Text', text: /^mentioned$/ })).toBeTruthy()
+  expect(await pane.find({ type: 'Text', text: /^mentioned$/ })).toBeFalsy()
 
   // Back to the bead from the conversation, and up to a parent bd doesn't know.
   await ui.press({ key: 'msg-m1', link: { href: 'https://beads.invalid/demo-a1b2c' } })

@@ -175,8 +175,22 @@ export const parseAssigned = (stdout: string): { id: string; atMs: number }[] =>
     typeof r.id === 'string' ? [{ id: r.id, atMs: ms(r.updated_at) ?? 0 }] : [],
   )
 
-// Whether the session worked on a bead, or only looked at it or named it.
-export const isWork = (how: How): boolean => how !== 'viewed' && how !== 'mentioned'
+const WORK: ReadonlySet<string> = new Set<How>([
+  'created',
+  'closed',
+  'reopened',
+  'unclaimed',
+  'commented',
+  'linked',
+  'updated',
+  'claimed',
+  'assigned',
+  'in title',
+])
+
+// Whether the session worked on a bead, or a reply only linked it. A value an
+// earlier version stored, such as `viewed`, counts as a link.
+export const isWork = (how: string): boolean => WORK.has(how)
 
 // What a `bd` subcommand did; `null` for the ones that change nothing.
 const VERB = new Map<string, How | null>([

@@ -326,19 +326,8 @@ async function refreshShown($: EngineInterface, bd: string): Promise<void> {
 
 // Opens the pane on one bead, or on the session's list for null.
 async function openPane($: EngineInterface, id: string | null): Promise<void> {
-  if (id !== null) await markViewed($, id)
   await update($, selected, () => id)
   await $.ui.open({ id: PANE, title: 'Beads' })
-}
-
-// Puts a bead opened in the pane at the top of the session's list. A bead the
-// session changed keeps what it did, such as `claimed`.
-async function markViewed($: EngineInterface, id: string): Promise<void> {
-  const atMs = await $.clock.now()
-  await update($, touched, all => {
-    const was = all[id]?.how
-    return { ...all, [id]: { how: was && was !== 'mentioned' ? was : 'viewed', atMs } }
-  })
 }
 
 // Bead IDs a reply has linked this load, so each is added to the list once.
@@ -519,7 +508,6 @@ export const register: Register = (on, options) => {
       if (target === '~all') return update($, expanded, v => (v === id ? null : id))
       if (target === '~home') return update($, selected, () => null)
       refresh($, bd, [target])
-      await markViewed($, target)
       return update($, selected, () => target)
     }
     const md = (key: string, text: string) => {
@@ -603,15 +591,15 @@ export const register: Register = (on, options) => {
           const bead = entry?.kind === 'found' ? entry.bead : null
           return [{ id: ref, title: bead?.title ?? '', status: bead?.status ?? '' }]
         })
-      // The beads the session worked on, then the ones it only opened or linked.
+      // The beads the session worked on, each with what it last did, then the
+      // ones a reply only linked.
       const worked = rowsOf(seen.filter(([, t]) => isWork(t.how)))
       const looked = rowsOf(seen.filter(([, t]) => !isWork(t.how)))
       const notes = Object.fromEntries(seen.map(([ref, t]) => [ref, t.how]))
       if (worked.length === 0 && looked.length === 0) {
         return (
           <Text color="subtle">
-            None yet. A bead this session links, opens, claims, creates, changes or closes shows
-            here.
+            None yet. A bead this session links, claims, creates, changes or closes shows here.
           </Text>
         )
       }
@@ -619,7 +607,8 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column" gap="lg">
           {worked.length > 0 &&
             section('worked-section', 'Worked on', list('worked', worked, '', notes))}
-          {looked.length > 0 && section('seen-section', 'Seen', list('seen', looked, '', notes))}
+          {looked.length > 0 &&
+            section('mentioned-section', 'Mentioned', list('mentioned', looked))}
         </Box>
       )
     }
