@@ -339,6 +339,8 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'beads',
       description: 'Show the beads this session has claimed or worked on',
+      // Opening the pane changes nothing in the turn, so it needn't wait for one to end.
+      immediate: true,
     })
     return next(e)
   })
@@ -359,7 +361,7 @@ export const register: Register = (on, options) => {
     if ((await read($, setup))?.kind !== 'ready') asking = null
     refresh($, bd, Object.keys(await read($, touched)))
     await openPane($, null)
-    return { text: 'Opened the beads pane.' }
+    return {}
   })
 
   // Records each bead a shell command changed, the main loop's or a

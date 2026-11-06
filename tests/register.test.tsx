@@ -426,3 +426,29 @@ test('without a journal the pane polls while open, and stops once closed', async
   await settle(clock)
   expect(shows()).toBe(after)
 })
+
+test('/beads runs mid-turn and opens the pane without a transcript line', async ($, on) => {
+  let registered: Record<string, unknown> = {}
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', (_, e) => {
+    registered = { ...e }
+    return { value: { command: e.name } }
+  })
+  let opened = ''
+  on('ui.open', (_, e) => {
+    opened = e.id
+    return { value: { isPlaced: true } }
+  })
+  on('process.run', fakeBd({}))
+
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  expect(registered).toMatchObject({ name: 'beads', immediate: true })
+  const typed = {
+    command: 'beads',
+    args: '',
+    origin: { kind: 'composer' as const },
+    presentation: { isFullscreen: false, columns: 100 },
+  }
+  expect(await $.command.run(typed)).toEqual({})
+  expect(opened).toBe('bead')
+})
