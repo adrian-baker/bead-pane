@@ -811,7 +811,7 @@ export const register: Register = (on, options) => {
     // their own `.n`, since the parent's ID is in the breadcrumb.
     // `spaced` puts room under each row: `true` for the beads of the pane's
     // own list that stand alone, read one at a time, and `'xs'`, a little,
-    // for a bead's lists. A group under a parent has none, so it reads as one. It is in
+    // for a group under a parent and a bead's lists. It is in
     // the row's ID cell, which stretches over it, so a tree's lines run
     // through it to the next row.
     const list = (
@@ -1061,7 +1061,7 @@ export const register: Register = (on, options) => {
                     [group.parent],
                     '',
                     rowNotes,
-                    false,
+                    'xs',
                     key,
                     false,
                     topWidth,
@@ -1074,7 +1074,7 @@ export const register: Register = (on, options) => {
                     group.rows,
                     group.parent.id,
                     rowNotes,
-                    false,
+                    'xs',
                     key,
                     true,
                     topWidth,
